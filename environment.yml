@@ -1,0 +1,47 @@
+name: document-processing-api
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.11
+  - pip
+  - redis
+  - nodejs>=18
+  - npm
+  - pip:
+    - fastapi==0.115.6
+    - uvicorn[standard]==0.32.1
+    - pydantic==2.10.4
+    - pydantic-settings==2.7.0
+    - redis==5.2.1
+    - bullmq==2.15.0
+    - httpx==0.28.1
+    - aiohttp==3.11.11
+    - python-dotenv==1.0.1
+    - structlog==24.4.0
+    - rich==13.9.4
+    - python-dateutil==2.9.0.post0
+    - orjson==3.10.12
+    - typing-extensions==4.12.2
+    - python-magic==0.4.27
+    - pypdf2==3.0.1
+    - python-docx==1.1.2
+    - markdown==3.7
+    - qdrant-client==1.12.1
+    - typesense==0.21.0
+    - asyncio-mqtt==0.16.2
+    - pytest==8.3.4
+    - pytest-asyncio==0.24.0
+    - pytest-cov==6.0.0
+    - pytest-mock==3.14.0
+    - black==24.10.0
+    - isort==5.13.2
+    - flake8==7.1.1
+    - mypy==1.13.0
+    - pre-commit==4.0.1
+    - mkdocs==1.6.1
+    - mkdocs-material==9.5.48
+    - python-jose[cryptography]==3.3.0
+    - passlib[bcrypt]==1.7.4
+    - click==8.1.8
+    - tqdm==4.67.1 

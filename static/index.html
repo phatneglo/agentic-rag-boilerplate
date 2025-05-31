@@ -13,12 +13,48 @@
     
     <!-- Custom CSS -->
     <link rel="stylesheet" href="/static/css/file-manager.css">
+    
+    <style>
+        /* Iframe-friendly adjustments */
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #f8fafc;
+        }
+        
+        .navbar {
+            position: relative !important;
+            background-color: white !important;
+            border-bottom: 1px solid #e2e8f0;
+            box-shadow: 0 1px 3px 0 rgb(0 0 0 / 0.1);
+        }
+        
+        .main-content {
+            margin-top: 0;
+            padding: 0;
+        }
+        
+        .container-fluid {
+            max-width: none;
+        }
+        
+        /* Adjust navbar for iframe */
+        .navbar-brand {
+            font-size: 1.1rem;
+        }
+        
+        /* Remove unnecessary margin/padding */
+        #uTools-filemanager {
+            height: 100vh;
+            overflow: hidden;
+        }
+    </style>
 </head>
 <body>
     <!-- File Manager Component -->
-    <div id="uTools-filemanager" class="container-fluid h-100">
-        <!-- Navigation Header -->
-        <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
+    <div id="uTools-filemanager" class="h-100">
+        <!-- Compact Navigation Header -->
+        <nav class="navbar navbar-expand-lg navbar-light">
             <div class="container-fluid">
                 <a class="navbar-brand d-flex align-items-center" href="#">
                     <i class="fas fa-folder-open text-primary me-2"></i>
@@ -70,7 +106,7 @@
         </nav>
 
         <!-- Main Content Area -->
-        <div class="main-content">
+        <div class="main-content h-100">
             <!-- Breadcrumb Navigation -->
             <div class="breadcrumb-container bg-white border-bottom p-3">
                 <nav aria-label="breadcrumb">
@@ -116,7 +152,7 @@
             </div>
 
             <!-- File Grid/List -->
-            <div class="file-container p-3" id="fileContainer">
+            <div class="file-container p-3" id="fileContainer" style="height: calc(100vh - 200px); overflow-y: auto;">
                 <!-- Loading Spinner -->
                 <div class="loading-spinner text-center py-5" id="loadingSpinner">
                     <div class="spinner-border text-primary" role="status">

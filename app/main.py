@@ -1,8 +1,10 @@
 """
 FastAPI application entry point.
 """
+import os
 import time
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Dict, Any
 
 from fastapi import FastAPI, Request, status
@@ -222,8 +224,34 @@ async def health_check() -> HealthCheckResponse:
             logger.warning("Redis health check failed", error=str(e))
             dependencies["redis"] = "disconnected"
         
+        # Check file storage
+        try:
+            storage_path = Path(settings.file_storage_path)
+            storage_path.mkdir(parents=True, exist_ok=True)
+            dependencies["storage"] = "accessible"
+        except Exception as e:
+            logger.warning("Storage health check failed", error=str(e))
+            dependencies["storage"] = "inaccessible"
+        
+        # Get file storage metrics
+        file_count = 0
+        storage_used = 0
+        try:
+            storage_path = Path(settings.file_storage_path)
+            if storage_path.exists():
+                for file_path in storage_path.rglob("*"):
+                    if file_path.is_file():
+                        file_count += 1
+                        storage_used += file_path.stat().st_size
+        except Exception as e:
+            logger.warning("Failed to get storage metrics", error=str(e))
+        
         # Determine overall status
-        overall_status = "healthy" if dependencies["redis"] == "connected" else "degraded"
+        overall_status = "healthy"
+        if dependencies["redis"] != "connected":
+            overall_status = "degraded"
+        if dependencies["storage"] != "accessible":
+            overall_status = "degraded"
         
         return HealthCheckResponse(
             success=True,
@@ -232,7 +260,14 @@ async def health_check() -> HealthCheckResponse:
             status=overall_status,
             version=__version__,
             uptime=uptime,
-            dependencies=dependencies
+            dependencies=dependencies,
+            # Additional fields for dashboard
+            **{
+                "file_count": file_count,
+                "storage_used": storage_used,
+                "storage_status": dependencies["storage"],
+                "database_status": dependencies["redis"]  # Using Redis as our primary data store
+            }
         )
         
     except Exception as e:
@@ -244,7 +279,13 @@ async def health_check() -> HealthCheckResponse:
             status="unhealthy",
             version=__version__,
             uptime=0.0,
-            dependencies={"redis": "unknown"}
+            dependencies={"redis": "unknown", "storage": "unknown"},
+            **{
+                "file_count": 0,
+                "storage_used": 0,
+                "storage_status": "unknown",
+                "database_status": "unknown"
+            }
         )
 
 
@@ -313,6 +354,16 @@ app.include_router(
 # Mount static files for file manager UI
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Dashboard UI endpoint - Main landing page
+@app.get(
+    "/",
+    tags=["dashboard"],
+    summary="Dashboard UI", 
+    description="Serve the main dashboard interface"
+)
+async def dashboard_ui():
+    """Serve the main dashboard interface."""
+    return FileResponse("static/dashboard.html")
 
 # File Manager UI endpoint
 @app.get(
@@ -325,17 +376,16 @@ async def file_manager_ui():
     """Serve the file manager web interface."""
     return FileResponse("static/index.html")
 
-
-# Root endpoint
+# API Information endpoint
 @app.get(
-    "/",
+    "/api",
     tags=["root"],
     summary="API Information",
     description="Get basic information about the API"
 )
-async def root() -> Dict[str, Any]:
+async def api_info() -> Dict[str, Any]:
     """
-    Root endpoint providing basic API information.
+    API information endpoint providing basic API information.
     """
     return {
         "name": "Document Processing API",
@@ -344,6 +394,7 @@ async def root() -> Dict[str, Any]:
         "docs_url": "/docs",
         "redoc_url": "/redoc",
         "health_url": "/health",
+        "dashboard_url": "/",
         "file_manager_url": "/file-manager",
         "api_prefix": f"/api/{settings.api_version}",
         "endpoints": {

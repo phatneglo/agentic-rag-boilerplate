@@ -14,6 +14,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.core.logging_config import configure_logging, get_logger, log_request_response
 from app.api.routes.document_routes import router as document_router
+from app.api.routes.file_routes import upload_router, manager_router
 from app.utils.queue_manager import queue_manager
 from app.models.responses.document_responses import HealthCheckResponse, ErrorResponse
 from app import __version__
@@ -296,6 +297,16 @@ app.include_router(
     tags=["documents"]
 )
 
+app.include_router(
+    upload_router,
+    prefix=f"/api/{settings.api_version}"
+)
+
+app.include_router(
+    manager_router,
+    prefix=f"/api/{settings.api_version}"
+)
+
 
 # Root endpoint
 @app.get(
@@ -320,7 +331,16 @@ async def root() -> Dict[str, Any]:
             "convert_document": f"/api/{settings.api_version}/documents/convert",
             "index_typesense": f"/api/{settings.api_version}/documents/index/typesense",
             "index_qdrant": f"/api/{settings.api_version}/documents/index/qdrant",
-            "sync_document": f"/api/{settings.api_version}/documents/sync"
+            "sync_document": f"/api/{settings.api_version}/documents/sync",
+            "upload_files": f"/api/{settings.api_version}/files/upload",
+            "get_signed_url": f"/api/{settings.api_version}/files/get-signed-url",
+            "file_manager": {
+                "download": f"/api/{settings.api_version}/file-manager/download",
+                "list": f"/api/{settings.api_version}/file-manager/list",
+                "delete": f"/api/{settings.api_version}/file-manager",
+                "copy": f"/api/{settings.api_version}/file-manager/copy",
+                "info": f"/api/{settings.api_version}/file-manager/info"
+            }
         }
     }
 

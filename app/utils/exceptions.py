@@ -147,4 +147,45 @@ class AuthenticationError(DocumentProcessingError):
 
 class AuthorizationError(DocumentProcessingError):
     """Exception raised for authorization errors."""
+    pass
+
+
+# Object Storage and File Upload Exceptions
+class ObjectStorageError(DocumentProcessingError):
+    """Base exception for object storage errors."""
+    pass
+
+
+class FileUploadError(ObjectStorageError):
+    """Exception raised for file upload errors."""
+    pass
+
+
+class FileDownloadError(ObjectStorageError):
+    """Exception raised for file download errors."""
+    pass
+
+
+class FileNotFoundError(ObjectStorageError):
+    """Exception raised when file is not found in storage."""
+    pass
+
+
+class InvalidFileTypeError(FileUploadError):
+    """Exception raised for invalid file types."""
+    pass
+
+
+class FileSizeExceededError(FileUploadError):
+    """Exception raised when file size exceeds limits."""
+    pass
+
+
+class StorageQuotaExceededError(ObjectStorageError):
+    """Exception raised when storage quota is exceeded."""
+    pass
+
+
+class InvalidStorageConfigurationError(ObjectStorageError):
+    """Exception raised for invalid storage configuration."""
     pass 

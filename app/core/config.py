@@ -1,7 +1,7 @@
 """
 Application configuration settings.
 """
-from typing import List, Optional
+from typing import Dict, List, Optional
 from pydantic import Field, validator
 from pydantic_settings import BaseSettings
 
@@ -12,9 +12,14 @@ class Settings(BaseSettings):
     # API Configuration
     api_host: str = Field(default="0.0.0.0", env="API_HOST")
     api_port: int = Field(default=8000, env="API_PORT")
-    debug: bool = Field(default=False, env="DEBUG")
+    api_debug: bool = Field(default=False, env="API_DEBUG")
+    api_reload: bool = Field(default=False, env="API_RELOAD")
     log_level: str = Field(default="INFO", env="LOG_LEVEL")
     api_version: str = Field(default="v1", env="API_VERSION")
+    
+    # Development Configuration (additional fields from env.example)
+    debug: bool = Field(default=False, env="DEBUG")
+    reload: bool = Field(default=False, env="RELOAD")
     
     # Redis Configuration
     redis_host: str = Field(default="localhost", env="REDIS_HOST")
@@ -38,7 +43,7 @@ class Settings(BaseSettings):
     # Qdrant Configuration
     qdrant_host: str = Field(default="localhost", env="QDRANT_HOST")
     qdrant_port: int = Field(default=6333, env="QDRANT_PORT")
-    qdrant_api_key: Optional[str] = Field(default=None, env="QDRANT_API_KEY")
+    qdrant_api_key: str = Field(default="", env="QDRANT_API_KEY")
     qdrant_protocol: str = Field(default="http", env="QDRANT_PROTOCOL")
     
     # Document Processing
@@ -58,13 +63,29 @@ class Settings(BaseSettings):
     log_file: str = Field(default="./logs/app.log", env="LOG_FILE")
     
     # Worker Configuration
-    worker_concurrency: int = Field(default=3, env="WORKER_CONCURRENCY")
+    worker_concurrency: int = Field(default=2, env="WORKER_CONCURRENCY")
     worker_timeout: int = Field(default=600, env="WORKER_TIMEOUT")
     worker_retry_delay: int = Field(default=5, env="WORKER_RETRY_DELAY")
     
     # Development
-    reload: bool = Field(default=True, env="RELOAD")
     workers: int = Field(default=1, env="WORKERS")
+    
+    # Object Storage Configuration
+    object_storage_provider: str = Field(default="s3", env="OBJECT_STORAGE_PROVIDER")
+    object_storage_bucket: str = Field(default="", env="OBJECT_STORAGE_BUCKET")
+    object_storage_region: str = Field(default="us-east-1", env="OBJECT_STORAGE_REGION")
+    object_storage_access_key: str = Field(default="", env="OBJECT_STORAGE_ACCESS_KEY")
+    object_storage_secret_key: str = Field(default="", env="OBJECT_STORAGE_SECRET_KEY")
+    object_storage_endpoint_url: Optional[str] = Field(default=None, env="OBJECT_STORAGE_ENDPOINT_URL")
+    object_storage_public_url: Optional[str] = Field(default=None, env="OBJECT_STORAGE_PUBLIC_URL")
+    
+    # File Upload Configuration
+    max_file_size_mb: int = Field(default=100, env="MAX_FILE_SIZE_MB")
+    allowed_file_extensions: str = Field(
+        default=".pdf,.docx,.txt,.md,.html,.jpg,.jpeg,.png,.gif,.csv,.json,.xml",
+        env="ALLOWED_FILE_EXTENSIONS"
+    )
+    upload_folder_structure: str = Field(default="year-month-day", env="UPLOAD_FOLDER_STRUCTURE")
     
     @validator("redis_url", pre=True, always=True)
     def build_redis_url(cls, v, values):
@@ -99,7 +120,17 @@ class Settings(BaseSettings):
         return f"{self.qdrant_protocol}://{self.qdrant_host}:{self.qdrant_port}"
     
     @property
-    def queue_names(self) -> dict:
+    def max_file_size_bytes(self) -> int:
+        """Get max file size in bytes."""
+        return self.max_file_size_mb * 1024 * 1024
+    
+    @property
+    def allowed_extensions_list(self) -> List[str]:
+        """Get allowed file extensions as a list."""
+        return [ext.strip().lower() for ext in self.allowed_file_extensions.split(",")]
+    
+    @property
+    def queue_names(self) -> Dict[str, str]:
         """Get queue names with prefix."""
         return {
             "document_converter": f"{self.queue_prefix}:document_converter",

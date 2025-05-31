@@ -6,7 +6,7 @@ Provides REST endpoints for file and folder management operations.
 
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Query, Form
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, RedirectResponse
 from fastapi.security import HTTPBearer
 import tempfile
 import os
@@ -182,20 +182,13 @@ async def move_item(request: MoveItemRequest):
 
 @router.get("/download/file")
 async def download_file(path: str = Query(..., description="File path to download")):
-    """
-    Download a file.
-    
-    - **path**: Path of the file to download
-    """
+    """Download a single file."""
     try:
-        file_path, mime_type = await file_manager_service.download_file(path=path)
+        download_url, mime_type = await file_manager_service.download_file(path)
         
-        return FileResponse(
-            path=str(file_path),
-            media_type=mime_type,
-            filename=file_path.name,
-            headers={"Content-Disposition": f"attachment; filename={file_path.name}"}
-        )
+        # For object storage, redirect to the presigned URL
+        return RedirectResponse(url=download_url, status_code=302)
+        
     except HTTPException:
         raise
     except Exception as e:
@@ -205,29 +198,11 @@ async def download_file(path: str = Query(..., description="File path to downloa
 
 @router.get("/download/folder")
 async def download_folder(path: str = Query(..., description="Folder path to download as zip")):
-    """
-    Download a folder as a zip archive.
-    
-    - **path**: Path of the folder to download
-    """
+    """Download a folder as a zip archive."""
     try:
-        zip_path, mime_type = await file_manager_service.download_folder(path=path)
+        # For now, return an error as folder download is not implemented for object storage
+        raise HTTPException(status_code=501, detail="Folder download not yet implemented for object storage")
         
-        def cleanup_temp_file():
-            """Clean up temporary zip file after download."""
-            try:
-                if zip_path.exists():
-                    zip_path.unlink()
-            except Exception as e:
-                logger.warning(f"Failed to cleanup temp file {zip_path}: {e}")
-        
-        return FileResponse(
-            path=str(zip_path),
-            media_type=mime_type,
-            filename=zip_path.name,
-            headers={"Content-Disposition": f"attachment; filename={zip_path.name}"},
-            background=cleanup_temp_file
-        )
     except HTTPException:
         raise
     except Exception as e:

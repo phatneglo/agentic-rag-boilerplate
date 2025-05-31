@@ -33,7 +33,7 @@ class FileItem(BaseModel):
     icon: str = Field(..., description="FontAwesome icon class")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "name": "document.pdf",
                 "path": "documents/document.pdf",
@@ -57,7 +57,7 @@ class Breadcrumb(BaseModel):
     path: str = Field(..., description="Path for this breadcrumb")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "name": "Documents",
                 "path": "documents"
@@ -75,7 +75,7 @@ class DirectoryListing(BaseModel):
     search_query: str = Field(default="", description="Applied search query")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "current_path": "documents",
                 "items": [
@@ -109,7 +109,7 @@ class DirectoryListingResponse(BaseResponse):
     data: DirectoryListing = Field(..., description="Directory listing data")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "message": "Directory listed successfully",
@@ -135,7 +135,7 @@ class FileOperationData(BaseModel):
     size_formatted: Optional[str] = Field(None, description="Human-readable size")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "name": "new_folder",
                 "path": "documents/new_folder",
@@ -150,7 +150,7 @@ class FileOperationResponse(BaseResponse):
     data: FileOperationData = Field(..., description="Operation result data")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "message": "Operation completed successfully",
@@ -173,7 +173,7 @@ class SearchResult(BaseModel):
     total_results: int = Field(..., description="Total number of results")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "query": "document",
                 "search_path": "documents",
@@ -189,7 +189,7 @@ class SearchResponse(BaseResponse):
     data: SearchResult = Field(..., description="Search result data")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "message": "Search completed successfully",
@@ -221,7 +221,7 @@ class FileInfoData(BaseModel):
     checksum: Optional[str] = Field(None, description="MD5 checksum (for files)")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "name": "document.pdf",
                 "path": "documents/document.pdf",
@@ -245,7 +245,7 @@ class FileInfoResponse(BaseResponse):
     data: FileInfoData = Field(..., description="File information data")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "message": "File information retrieved successfully",
@@ -278,7 +278,7 @@ class ShareLinkData(BaseModel):
     allow_download: bool = Field(..., description="Whether download is allowed")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "share_id": "abc123def456",
                 "share_url": "https://example.com/share/abc123def456",
@@ -296,7 +296,7 @@ class ShareLinkResponse(BaseResponse):
     data: ShareLinkData = Field(..., description="Share link data")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "message": "Share link created successfully",
@@ -323,7 +323,7 @@ class BulkOperationResult(BaseModel):
     errors: List[Dict[str, str]] = Field(default=[], description="List of errors")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "operation": "delete",
                 "total_items": 3,
@@ -342,7 +342,7 @@ class BulkOperationResponse(BaseResponse):
     data: BulkOperationResult = Field(..., description="Bulk operation results")
     
     class Config:
-        schema_extra = {
+        json_schema_extra = {
             "example": {
                 "success": True,
                 "message": "Bulk operation completed",

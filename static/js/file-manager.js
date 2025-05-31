@@ -526,7 +526,11 @@ class FileManager {
         const progressContainer = document.getElementById('uploadProgress');
         const progressBar = progressContainer.querySelector('.progress-bar');
         
+        // Reset and show progress
+        progressBar.style.width = '0%';
         progressContainer.classList.remove('d-none');
+        
+        let successCount = 0;
         
         for (let i = 0; i < files.length; i++) {
             const file = files[i];
@@ -542,7 +546,9 @@ class FileManager {
                 
                 const data = await response.json();
                 
-                if (!data.success) {
+                if (data.success) {
+                    successCount++;
+                } else {
                     this.showError(`Failed to upload ${file.name}: ${data.message}`);
                 }
                 
@@ -556,10 +562,21 @@ class FileManager {
             }
         }
         
+        // Hide progress and close modal
         progressContainer.classList.add('d-none');
-        bootstrap.Modal.getInstance(document.getElementById('uploadModal')).hide();
-        this.showSuccess('Files uploaded successfully');
-        await this.loadDirectory();
+        const modal = bootstrap.Modal.getInstance(document.getElementById('uploadModal'));
+        if (modal) {
+            modal.hide();
+        }
+        
+        // Reset file input
+        document.getElementById('fileInput').value = '';
+        
+        // Show success message
+        if (successCount > 0) {
+            this.showSuccess(`${successCount} file(s) uploaded successfully`);
+            await this.loadDirectory();
+        }
     }
     
     /**

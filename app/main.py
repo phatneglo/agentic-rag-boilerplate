@@ -7,14 +7,16 @@ from typing import Dict, Any
 
 from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
+from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.core.config import settings
 from app.core.logging_config import configure_logging, get_logger, log_request_response
 from app.api.routes.document_routes import router as document_router
 from app.api.routes.file_routes import upload_router, manager_router
+from app.api.routes.file_manager import router as file_manager_router
 from app.utils.queue_manager import queue_manager
 from app.models.responses.document_responses import HealthCheckResponse, ErrorResponse
 from app import __version__
@@ -307,6 +309,26 @@ app.include_router(
     prefix=f"/api/{settings.api_version}"
 )
 
+app.include_router(
+    file_manager_router,
+    prefix=f"/api/{settings.api_version}"
+)
+
+# Mount static files for file manager UI
+app.mount("/static", StaticFiles(directory="static"), name="static")
+
+
+# File Manager UI endpoint
+@app.get(
+    "/file-manager",
+    tags=["file-manager"],
+    summary="File Manager UI",
+    description="Serve the file manager web interface"
+)
+async def file_manager_ui():
+    """Serve the file manager web interface."""
+    return FileResponse("static/index.html")
+
 
 # Root endpoint
 @app.get(
@@ -326,6 +348,7 @@ async def root() -> Dict[str, Any]:
         "docs_url": "/docs",
         "redoc_url": "/redoc",
         "health_url": "/health",
+        "file_manager_url": "/file-manager",
         "api_prefix": f"/api/{settings.api_version}",
         "endpoints": {
             "convert_document": f"/api/{settings.api_version}/documents/convert",
@@ -335,10 +358,17 @@ async def root() -> Dict[str, Any]:
             "upload_files": f"/api/{settings.api_version}/files/upload",
             "get_signed_url": f"/api/{settings.api_version}/files/get-signed-url",
             "file_manager": {
-                "download": f"/api/{settings.api_version}/file-manager/download",
-                "list": f"/api/{settings.api_version}/file-manager/list",
-                "delete": f"/api/{settings.api_version}/file-manager",
-                "copy": f"/api/{settings.api_version}/file-manager/copy",
+                "ui": "/file-manager",
+                "api": f"/api/{settings.api_version}/file-manager",
+                "list": f"/api/{settings.api_version}/file-manager/",
+                "upload": f"/api/{settings.api_version}/file-manager/upload",
+                "create_folder": f"/api/{settings.api_version}/file-manager/folder",
+                "download_file": f"/api/{settings.api_version}/file-manager/download/file",
+                "download_folder": f"/api/{settings.api_version}/file-manager/download/folder",
+                "delete": f"/api/{settings.api_version}/file-manager/item",
+                "rename": f"/api/{settings.api_version}/file-manager/rename",
+                "move": f"/api/{settings.api_version}/file-manager/move",
+                "search": f"/api/{settings.api_version}/file-manager/search",
                 "info": f"/api/{settings.api_version}/file-manager/info"
             }
         }

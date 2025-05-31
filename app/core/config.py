@@ -52,6 +52,16 @@ class Settings(BaseSettings):
     max_file_size: str = Field(default="50MB", env="MAX_FILE_SIZE")
     allowed_extensions: str = Field(default="pdf,docx,txt,md", env="ALLOWED_EXTENSIONS")
     
+    # File Manager Configuration
+    file_storage_path: str = Field(default="./file_storage", env="FILE_STORAGE_PATH")
+    max_file_size_mb: int = Field(default=100, env="MAX_FILE_SIZE_MB")
+    allowed_file_extensions: Optional[str] = Field(
+        default=".pdf,.docx,.txt,.md,.html,.jpg,.jpeg,.png,.gif,.csv,.json,.xml,.zip,.rar,.mp3,.mp4,.avi,.mov",
+        env="ALLOWED_FILE_EXTENSIONS"
+    )
+    enable_file_sharing: bool = Field(default=True, env="ENABLE_FILE_SHARING")
+    shared_link_expiry_hours: int = Field(default=24, env="SHARED_LINK_EXPIRY_HOURS")
+    
     # Security
     secret_key: str = Field(default="your-secret-key-here", env="SECRET_KEY")
     access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
@@ -79,12 +89,7 @@ class Settings(BaseSettings):
     object_storage_endpoint_url: Optional[str] = Field(default=None, env="OBJECT_STORAGE_ENDPOINT_URL")
     object_storage_public_url: Optional[str] = Field(default=None, env="OBJECT_STORAGE_PUBLIC_URL")
     
-    # File Upload Configuration
-    max_file_size_mb: int = Field(default=100, env="MAX_FILE_SIZE_MB")
-    allowed_file_extensions: str = Field(
-        default=".pdf,.docx,.txt,.md,.html,.jpg,.jpeg,.png,.gif,.csv,.json,.xml",
-        env="ALLOWED_FILE_EXTENSIONS"
-    )
+    # File Upload Configuration (legacy - keeping for backward compatibility)
     upload_folder_structure: str = Field(default="year-month-day", env="UPLOAD_FOLDER_STRUCTURE")
     
     @validator("redis_url", pre=True, always=True)
@@ -109,6 +114,13 @@ class Settings(BaseSettings):
             return [ext.strip() for ext in v.split(",")]
         return v
     
+    @validator("allowed_file_extensions", pre=True)
+    def parse_allowed_file_extensions(cls, v):
+        """Parse allowed file extensions into a list."""
+        if isinstance(v, str):
+            return v  # Keep as string, will be parsed in property
+        return v
+    
     @property
     def typesense_url(self) -> str:
         """Get Typesense URL."""
@@ -127,7 +139,9 @@ class Settings(BaseSettings):
     @property
     def allowed_extensions_list(self) -> List[str]:
         """Get allowed file extensions as a list."""
-        return [ext.strip().lower() for ext in self.allowed_file_extensions.split(",")]
+        if isinstance(self.allowed_file_extensions, str):
+            return [ext.strip().lower() for ext in self.allowed_file_extensions.split(",")]
+        return self.allowed_file_extensions or []
     
     @property
     def queue_names(self) -> Dict[str, str]:
@@ -137,6 +151,7 @@ class Settings(BaseSettings):
             "typesense_indexer": f"{self.queue_prefix}:typesense_indexer",
             "qdrant_indexer": f"{self.queue_prefix}:qdrant_indexer",
             "document_sync": f"{self.queue_prefix}:document_sync",
+            "file_manager": f"{self.queue_prefix}:file_manager",
         }
     
     class Config:
@@ -146,4 +161,9 @@ class Settings(BaseSettings):
 
 
 # Global settings instance
-settings = Settings() 
+settings = Settings()
+
+
+def get_settings() -> Settings:
+    """Get application settings."""
+    return settings 

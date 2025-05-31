@@ -1,0 +1,444 @@
+/* File Manager Styles */
+
+:root {
+    --primary-color: #0d6efd;
+    --secondary-color: #6c757d;
+    --success-color: #198754;
+    --danger-color: #dc3545;
+    --warning-color: #ffc107;
+    --info-color: #0dcaf0;
+    --light-color: #f8f9fa;
+    --dark-color: #212529;
+    --border-color: #dee2e6;
+    --hover-color: #f8f9fa;
+    --shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    --shadow-lg: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
+}
+
+/* Global Styles */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: #fafafa;
+    height: 100vh;
+    overflow: hidden;
+}
+
+/* Navigation */
+.navbar {
+    box-shadow: var(--shadow);
+    z-index: 1000;
+}
+
+.navbar-brand {
+    font-weight: 600;
+    color: var(--dark-color) !important;
+}
+
+.search-container {
+    max-width: 500px;
+    width: 100%;
+}
+
+.search-container .form-control {
+    border: 1px solid var(--border-color);
+    transition: all 0.2s ease;
+}
+
+.search-container .form-control:focus {
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Sidebar */
+.sidebar {
+    height: calc(100vh - 76px);
+    overflow-y: auto;
+    border-right: 1px solid var(--border-color);
+}
+
+.sidebar .nav-link {
+    color: var(--secondary-color);
+    border-radius: 0.375rem;
+    margin-bottom: 0.25rem;
+    transition: all 0.2s ease;
+    font-size: 0.875rem;
+}
+
+.sidebar .nav-link:hover {
+    background-color: var(--hover-color);
+    color: var(--dark-color);
+}
+
+.sidebar .nav-link.active {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+/* Main Content */
+.main-content {
+    height: calc(100vh - 76px);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+.breadcrumb-container {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.breadcrumb-item a {
+    color: var(--primary-color);
+    text-decoration: none;
+}
+
+.breadcrumb-item a:hover {
+    text-decoration: underline;
+}
+
+/* Toolbar */
+.toolbar {
+    flex-shrink: 0;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.btn-group .btn {
+    border-color: var(--border-color);
+}
+
+.btn-group .btn.active {
+    background-color: var(--primary-color);
+    border-color: var(--primary-color);
+    color: white;
+}
+
+/* File Container */
+.file-container {
+    flex: 1;
+    overflow-y: auto;
+    background-color: white;
+}
+
+/* File Grid */
+.file-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+    padding: 0.5rem 0;
+}
+
+.file-item {
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    padding: 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background-color: white;
+    position: relative;
+    user-select: none;
+}
+
+.file-item:hover {
+    border-color: var(--primary-color);
+    box-shadow: var(--shadow);
+    transform: translateY(-1px);
+}
+
+.file-item.selected {
+    border-color: var(--primary-color);
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.file-item .file-icon {
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    color: var(--secondary-color);
+}
+
+.file-item.folder .file-icon {
+    color: #ffc107;
+}
+
+.file-item .file-name {
+    font-size: 0.875rem;
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+    word-break: break-word;
+    line-height: 1.2;
+}
+
+.file-item .file-meta {
+    font-size: 0.75rem;
+    color: var(--secondary-color);
+}
+
+.file-item .selection-checkbox {
+    position: absolute;
+    top: 0.5rem;
+    left: 0.5rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.file-item:hover .selection-checkbox,
+.file-item.selected .selection-checkbox {
+    opacity: 1;
+}
+
+/* List View */
+.file-grid.list-view {
+    display: block;
+}
+
+.file-grid.list-view .file-item {
+    display: flex;
+    align-items: center;
+    text-align: left;
+    padding: 0.75rem 1rem;
+    margin-bottom: 0.25rem;
+    border-radius: 0.375rem;
+}
+
+.file-grid.list-view .file-item .file-icon {
+    font-size: 1.5rem;
+    margin-bottom: 0;
+    margin-right: 1rem;
+    flex-shrink: 0;
+}
+
+.file-grid.list-view .file-item .file-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.file-grid.list-view .file-item .file-name {
+    margin-bottom: 0;
+}
+
+.file-grid.list-view .file-item .file-meta {
+    margin-left: auto;
+    flex-shrink: 0;
+    text-align: right;
+}
+
+/* Modals */
+.modal-content {
+    border: none;
+    box-shadow: var(--shadow-lg);
+    border-radius: 0.75rem;
+}
+
+.modal-header {
+    border-bottom: 1px solid var(--border-color);
+    padding: 1.5rem;
+}
+
+.modal-body {
+    padding: 1.5rem;
+}
+
+/* Upload Area */
+.upload-area {
+    border-color: var(--border-color) !important;
+    background-color: var(--light-color);
+    transition: all 0.2s ease;
+    cursor: pointer;
+}
+
+.upload-area:hover {
+    border-color: var(--primary-color) !important;
+    background-color: rgba(13, 110, 253, 0.05);
+}
+
+.upload-area.dragover {
+    border-color: var(--primary-color) !important;
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+/* Context Menu */
+.context-menu {
+    position: fixed;
+    background-color: white;
+    border: 1px solid var(--border-color);
+    border-radius: 0.5rem;
+    box-shadow: var(--shadow-lg);
+    padding: 0.5rem 0;
+    min-width: 180px;
+    z-index: 1050;
+}
+
+.context-item {
+    display: block;
+    padding: 0.5rem 1rem;
+    color: var(--dark-color);
+    text-decoration: none;
+    font-size: 0.875rem;
+    transition: background-color 0.2s ease;
+}
+
+.context-item:hover {
+    background-color: var(--hover-color);
+    color: var(--dark-color);
+}
+
+.context-item.text-danger:hover {
+    background-color: rgba(220, 53, 69, 0.1);
+    color: var(--danger-color);
+}
+
+/* Loading States */
+.loading-spinner {
+    color: var(--secondary-color);
+}
+
+.empty-state {
+    color: var(--secondary-color);
+}
+
+/* Toast Notifications */
+.toast {
+    border: none;
+    box-shadow: var(--shadow-lg);
+    border-radius: 0.5rem;
+}
+
+.toast-header {
+    border-bottom: 1px solid var(--border-color);
+}
+
+/* Progress Bars */
+.progress {
+    height: 0.5rem;
+    border-radius: 0.25rem;
+    background-color: var(--light-color);
+}
+
+.progress-bar {
+    border-radius: 0.25rem;
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .sidebar {
+        position: fixed;
+        top: 76px;
+        left: -100%;
+        width: 280px;
+        height: calc(100vh - 76px);
+        z-index: 1040;
+        transition: left 0.3s ease;
+        background-color: white;
+        box-shadow: var(--shadow-lg);
+    }
+    
+    .sidebar.show {
+        left: 0;
+    }
+    
+    .main-content {
+        margin-left: 0;
+    }
+    
+    .file-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 0.75rem;
+    }
+    
+    .search-container {
+        max-width: 200px;
+    }
+    
+    .navbar .d-flex.gap-2 .btn {
+        padding: 0.375rem 0.5rem;
+        font-size: 0.875rem;
+    }
+    
+    .navbar .d-flex.gap-2 .btn .me-1 {
+        display: none;
+    }
+}
+
+@media (max-width: 576px) {
+    .file-grid {
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 0.5rem;
+    }
+    
+    .file-item {
+        padding: 0.75rem 0.5rem;
+    }
+    
+    .file-item .file-icon {
+        font-size: 2rem;
+    }
+    
+    .file-item .file-name {
+        font-size: 0.8rem;
+    }
+    
+    .file-item .file-meta {
+        font-size: 0.7rem;
+    }
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.file-item {
+    animation: fadeIn 0.3s ease;
+}
+
+/* Scrollbar Styling */
+.file-container::-webkit-scrollbar,
+.sidebar::-webkit-scrollbar {
+    width: 6px;
+}
+
+.file-container::-webkit-scrollbar-track,
+.sidebar::-webkit-scrollbar-track {
+    background: var(--light-color);
+}
+
+.file-container::-webkit-scrollbar-thumb,
+.sidebar::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 3px;
+}
+
+.file-container::-webkit-scrollbar-thumb:hover,
+.sidebar::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-color);
+}
+
+/* Focus States */
+.btn:focus,
+.form-control:focus,
+.form-select:focus {
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Selection States */
+.selected-actions {
+    animation: fadeIn 0.2s ease;
+}
+
+/* File Type Colors */
+.file-item .file-icon.fa-file-pdf { color: #dc3545; }
+.file-item .file-icon.fa-file-word { color: #0d6efd; }
+.file-item .file-icon.fa-file-excel { color: #198754; }
+.file-item .file-icon.fa-file-powerpoint { color: #fd7e14; }
+.file-item .file-icon.fa-image { color: #6f42c1; }
+.file-item .file-icon.fa-file-video { color: #e91e63; }
+.file-item .file-icon.fa-file-audio { color: #ff9800; }
+.file-item .file-icon.fa-file-archive { color: #795548; }
+.file-item .file-icon.fa-code { color: #20c997; } 

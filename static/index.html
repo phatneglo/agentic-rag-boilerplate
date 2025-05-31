@@ -15,160 +15,129 @@
     <link rel="stylesheet" href="/static/css/file-manager.css">
 </head>
 <body>
-    <!-- Navigation Header -->
-    <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
-        <div class="container-fluid">
-            <a class="navbar-brand d-flex align-items-center" href="#">
-                <i class="fas fa-folder-open text-primary me-2"></i>
-                <span class="fw-bold">File Manager</span>
-            </a>
-            
-            <!-- Search Bar -->
-            <div class="d-flex align-items-center flex-grow-1 mx-4">
-                <div class="input-group search-container">
-                    <span class="input-group-text bg-light border-end-0">
-                        <i class="fas fa-search text-muted"></i>
-                    </span>
-                    <input type="text" class="form-control border-start-0 bg-light" 
-                           id="searchInput" placeholder="Search files and folders...">
-                    <button class="btn btn-outline-secondary" type="button" id="clearSearch">
-                        <i class="fas fa-times"></i>
-                    </button>
-                </div>
-            </div>
-            
-            <!-- Action Buttons -->
-            <div class="d-flex align-items-center gap-2">
-                <button class="btn btn-outline-primary btn-sm" id="uploadBtn">
-                    <i class="fas fa-upload me-1"></i>Upload
-                </button>
-                <button class="btn btn-outline-success btn-sm" id="newFolderBtn">
-                    <i class="fas fa-folder-plus me-1"></i>New Folder
-                </button>
-                <div class="dropdown">
-                    <button class="btn btn-outline-secondary btn-sm dropdown-toggle" 
-                            type="button" data-bs-toggle="dropdown">
-                        <i class="fas fa-cog"></i>
-                    </button>
-                    <ul class="dropdown-menu dropdown-menu-end">
-                        <li><a class="dropdown-item" href="#" id="viewModeGrid">
-                            <i class="fas fa-th me-2"></i>Grid View
-                        </a></li>
-                        <li><a class="dropdown-item" href="#" id="viewModeList">
-                            <i class="fas fa-list me-2"></i>List View
-                        </a></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li><a class="dropdown-item" href="#" id="refreshBtn">
-                            <i class="fas fa-sync-alt me-2"></i>Refresh
-                        </a></li>
-                    </ul>
-                </div>
-            </div>
-        </div>
-    </nav>
-
-    <!-- Main Content -->
-    <div class="container-fluid h-100">
-        <div class="row h-100">
-            <!-- Sidebar -->
-            <div class="col-md-3 col-lg-2 sidebar bg-light border-end">
-                <div class="p-3">
-                    <h6 class="text-muted text-uppercase fw-bold mb-3">Quick Access</h6>
-                    <ul class="nav nav-pills flex-column">
-                        <li class="nav-item">
-                            <a class="nav-link active" href="#" data-path="">
-                                <i class="fas fa-home me-2"></i>Home
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#" data-path="documents">
-                                <i class="fas fa-file-alt me-2"></i>Documents
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#" data-path="images">
-                                <i class="fas fa-image me-2"></i>Images
-                            </a>
-                        </li>
-                        <li class="nav-item">
-                            <a class="nav-link" href="#" data-path="downloads">
-                                <i class="fas fa-download me-2"></i>Downloads
-                            </a>
-                        </li>
-                    </ul>
-                </div>
-            </div>
-
-            <!-- Main Content Area -->
-            <div class="col-md-9 col-lg-10 main-content">
-                <!-- Breadcrumb Navigation -->
-                <div class="breadcrumb-container bg-white border-bottom p-3">
-                    <nav aria-label="breadcrumb">
-                        <ol class="breadcrumb mb-0" id="breadcrumbNav">
-                            <li class="breadcrumb-item active">
-                                <i class="fas fa-home me-1"></i>Home
-                            </li>
-                        </ol>
-                    </nav>
-                </div>
-
-                <!-- Toolbar -->
-                <div class="toolbar bg-white border-bottom p-3">
-                    <div class="d-flex justify-content-between align-items-center">
-                        <div class="d-flex align-items-center gap-3">
-                            <button class="btn btn-sm btn-outline-secondary" id="selectAllBtn">
-                                <i class="fas fa-check-square me-1"></i>Select All
-                            </button>
-                            <div class="selected-actions d-none">
-                                <button class="btn btn-sm btn-outline-danger" id="deleteSelectedBtn">
-                                    <i class="fas fa-trash me-1"></i>Delete
-                                </button>
-                                <button class="btn btn-sm btn-outline-primary" id="moveSelectedBtn">
-                                    <i class="fas fa-arrows-alt me-1"></i>Move
-                                </button>
-                            </div>
-                        </div>
-                        <div class="d-flex align-items-center gap-2">
-                            <span class="text-muted small" id="itemCount">0 items</span>
-                            <div class="btn-group btn-group-sm" role="group">
-                                <button type="button" class="btn btn-outline-secondary active" id="sortName">
-                                    <i class="fas fa-sort-alpha-down"></i>
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary" id="sortDate">
-                                    <i class="fas fa-sort-numeric-down"></i>
-                                </button>
-                                <button type="button" class="btn btn-outline-secondary" id="sortSize">
-                                    <i class="fas fa-sort-amount-down"></i>
-                                </button>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- File Grid/List -->
-                <div class="file-container p-3" id="fileContainer">
-                    <!-- Loading Spinner -->
-                    <div class="loading-spinner text-center py-5" id="loadingSpinner">
-                        <div class="spinner-border text-primary" role="status">
-                            <span class="visually-hidden">Loading...</span>
-                        </div>
-                        <p class="text-muted mt-2">Loading files...</p>
-                    </div>
-
-                    <!-- Empty State -->
-                    <div class="empty-state text-center py-5 d-none" id="emptyState">
-                        <i class="fas fa-folder-open text-muted" style="font-size: 4rem;"></i>
-                        <h5 class="text-muted mt-3">This folder is empty</h5>
-                        <p class="text-muted">Upload files or create folders to get started</p>
-                        <button class="btn btn-primary" id="emptyUploadBtn">
-                            <i class="fas fa-upload me-1"></i>Upload Files
+    <!-- File Manager Component -->
+    <div id="uTools-filemanager" class="container-fluid h-100">
+        <!-- Navigation Header -->
+        <nav class="navbar navbar-expand-lg navbar-light bg-white border-bottom">
+            <div class="container-fluid">
+                <a class="navbar-brand d-flex align-items-center" href="#">
+                    <i class="fas fa-folder-open text-primary me-2"></i>
+                    <span class="fw-bold">File Manager</span>
+                </a>
+                
+                <!-- Search Bar -->
+                <div class="d-flex align-items-center flex-grow-1 mx-4">
+                    <div class="input-group search-container">
+                        <span class="input-group-text bg-light border-end-0">
+                            <i class="fas fa-search text-muted"></i>
+                        </span>
+                        <input type="text" class="form-control border-start-0 bg-light" 
+                               id="searchInput" placeholder="Search files and folders...">
+                        <button class="btn btn-outline-secondary" type="button" id="clearSearch">
+                            <i class="fas fa-times"></i>
                         </button>
                     </div>
-
-                    <!-- File Grid -->
-                    <div class="file-grid" id="fileGrid">
-                        <!-- Files will be dynamically loaded here -->
+                </div>
+                
+                <!-- Action Buttons -->
+                <div class="d-flex align-items-center gap-2">
+                    <button class="btn btn-outline-primary btn-sm" id="uploadBtn">
+                        <i class="fas fa-upload me-1"></i>Upload
+                    </button>
+                    <button class="btn btn-outline-success btn-sm" id="newFolderBtn">
+                        <i class="fas fa-folder-plus me-1"></i>New Folder
+                    </button>
+                    <div class="dropdown">
+                        <button class="btn btn-outline-secondary btn-sm dropdown-toggle" 
+                                type="button" data-bs-toggle="dropdown">
+                            <i class="fas fa-cog"></i>
+                        </button>
+                        <ul class="dropdown-menu dropdown-menu-end">
+                            <li><a class="dropdown-item" href="#" id="viewModeGrid">
+                                <i class="fas fa-th me-2"></i>Grid View
+                            </a></li>
+                            <li><a class="dropdown-item" href="#" id="viewModeList">
+                                <i class="fas fa-list me-2"></i>List View
+                            </a></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li><a class="dropdown-item" href="#" id="refreshBtn">
+                                <i class="fas fa-sync-alt me-2"></i>Refresh
+                            </a></li>
+                        </ul>
                     </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content Area -->
+        <div class="main-content">
+            <!-- Breadcrumb Navigation -->
+            <div class="breadcrumb-container bg-white border-bottom p-3">
+                <nav aria-label="breadcrumb">
+                    <ol class="breadcrumb mb-0" id="breadcrumbNav">
+                        <li class="breadcrumb-item active">
+                            <i class="fas fa-home me-1"></i>Home
+                        </li>
+                    </ol>
+                </nav>
+            </div>
+
+            <!-- Toolbar -->
+            <div class="toolbar bg-white border-bottom p-3">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center gap-3">
+                        <button class="btn btn-sm btn-outline-secondary" id="selectAllBtn">
+                            <i class="fas fa-check-square me-1"></i>Select All
+                        </button>
+                        <div class="selected-actions d-none">
+                            <button class="btn btn-sm btn-outline-danger" id="deleteSelectedBtn">
+                                <i class="fas fa-trash me-1"></i>Delete
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" id="moveSelectedBtn">
+                                <i class="fas fa-arrows-alt me-1"></i>Move
+                            </button>
+                        </div>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="text-muted small" id="itemCount">0 items</span>
+                        <div class="btn-group btn-group-sm" role="group">
+                            <button type="button" class="btn btn-outline-secondary active" id="sortName">
+                                <i class="fas fa-sort-alpha-down"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="sortDate">
+                                <i class="fas fa-sort-numeric-down"></i>
+                            </button>
+                            <button type="button" class="btn btn-outline-secondary" id="sortSize">
+                                <i class="fas fa-sort-amount-down"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Grid/List -->
+            <div class="file-container p-3" id="fileContainer">
+                <!-- Loading Spinner -->
+                <div class="loading-spinner text-center py-5" id="loadingSpinner">
+                    <div class="spinner-border text-primary" role="status">
+                        <span class="visually-hidden">Loading...</span>
+                    </div>
+                    <p class="text-muted mt-2">Loading files...</p>
+                </div>
+
+                <!-- Empty State -->
+                <div class="empty-state text-center py-5 d-none" id="emptyState">
+                    <i class="fas fa-folder-open text-muted" style="font-size: 4rem;"></i>
+                    <h5 class="text-muted mt-3">This folder is empty</h5>
+                    <p class="text-muted">Upload files or create folders to get started</p>
+                    <button class="btn btn-primary" id="emptyUploadBtn">
+                        <i class="fas fa-upload me-1"></i>Upload Files
+                    </button>
+                </div>
+
+                <!-- File Grid -->
+                <div class="file-grid" id="fileGrid">
+                    <!-- Files will be dynamically loaded here -->
                 </div>
             </div>
         </div>
@@ -388,6 +357,19 @@
                         <div class="alert alert-warning" role="alert">
                             <i class="fas fa-info-circle me-2"></i>
                             This will delete all selected files and folders, including their contents.
+                        </div>
+                        
+                        <!-- Confirmation section for bulk delete with folders -->
+                        <div id="bulkConfirmationSection" class="d-none">
+                            <div class="mb-3">
+                                <label for="confirmBulkDelete" class="form-label">
+                                    To confirm deletion of multiple items including folders, please type:
+                                </label>
+                                <pre class="bg-dark text-danger p-2 rounded mb-2" style="font-family: 'Courier New', monospace;"><code>I confirm</code></pre>
+                                <input type="text" class="form-control" id="confirmBulkDelete" 
+                                       placeholder="Type 'I confirm' here..." autocomplete="off">
+                                <small class="text-muted">You can copy and paste the confirmation text from above</small>
+                            </div>
                         </div>
                     </div>
                 </div>

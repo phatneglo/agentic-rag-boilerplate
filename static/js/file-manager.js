@@ -82,25 +82,13 @@ class FileManager {
         // Delete confirmation modal
         document.getElementById('confirmDeleteBtn').addEventListener('click', this.executeDelete.bind(this));
         document.getElementById('confirmFolderName').addEventListener('input', this.validateFolderName.bind(this));
+        document.getElementById('confirmBulkDelete').addEventListener('input', this.validateFolderName.bind(this));
         
         // Upload functionality
         document.getElementById('browseBtn').addEventListener('click', () => {
             document.getElementById('fileInput').click();
         });
         document.getElementById('fileInput').addEventListener('change', this.handleFileSelect.bind(this));
-        
-        // Sidebar navigation
-        document.querySelectorAll('.sidebar .nav-link').forEach(link => {
-            link.addEventListener('click', (e) => {
-                e.preventDefault();
-                const path = link.dataset.path;
-                this.navigateToPath(path);
-                
-                // Update active state
-                document.querySelectorAll('.sidebar .nav-link').forEach(l => l.classList.remove('active'));
-                link.classList.add('active');
-            });
-        });
         
         // Move modal functionality
         document.getElementById('moveUpBtn').addEventListener('click', this.moveUpDirectory.bind(this));
@@ -125,19 +113,19 @@ class FileManager {
             const path = fileItem.dataset.path;
             const isDirectory = fileItem.dataset.type === 'folder';
             
-            // Handle checkbox clicks
+            // Handle checkbox clicks for files only
             if (e.target.type === 'checkbox') {
                 this.toggleItemSelection(path, e.target.checked);
                 return;
             }
             
-            // Handle double-click for folders
-            if (isDirectory && e.detail === 2) {
+            // For folders: single click opens them
+            if (isDirectory) {
                 this.navigateToPath(path);
                 return;
             }
             
-            // Handle single click selection
+            // For files: handle selection
             if (!e.ctrlKey && !e.metaKey) {
                 this.clearSelection();
             }
@@ -329,14 +317,19 @@ class FileManager {
         const selectedClass = isSelected ? 'selected' : '';
         const folderClass = item.is_directory ? 'folder' : '';
         
+        // Show checkbox for both files and folders
+        const checkboxHtml = `
+            <input type="checkbox" class="form-check-input selection-checkbox" 
+                   ${isSelected ? 'checked' : ''}>
+        `;
+        
         if (this.viewMode === 'list') {
             return `
                 <div class="file-item ${selectedClass} ${folderClass}" 
                      data-path="${item.path}" 
                      data-type="${item.type}"
                      data-name="${item.name}">
-                    <input type="checkbox" class="form-check-input selection-checkbox" 
-                           ${isSelected ? 'checked' : ''}>
+                    ${checkboxHtml}
                     <i class="${item.icon} file-icon"></i>
                     <div class="file-info">
                         <div class="file-name">${this.escapeHtml(item.name)}</div>
@@ -353,8 +346,7 @@ class FileManager {
                      data-path="${item.path}" 
                      data-type="${item.type}"
                      data-name="${item.name}">
-                    <input type="checkbox" class="form-check-input selection-checkbox" 
-                           ${isSelected ? 'checked' : ''}>
+                    ${checkboxHtml}
                     <i class="${item.icon} file-icon"></i>
                     <div class="file-name">${this.escapeHtml(item.name)}</div>
                     <div class="file-meta">
@@ -527,6 +519,12 @@ class FileManager {
         const selectedClass = isSelected ? 'selected' : '';
         const folderClass = item.is_directory ? 'folder' : '';
         
+        // Show checkbox for both files and folders
+        const checkboxHtml = `
+            <input type="checkbox" class="form-check-input selection-checkbox" 
+                   ${isSelected ? 'checked' : ''}>
+        `;
+        
         // Highlight search terms
         const highlightedName = this.highlightSearchTerm(item.name, this.searchQuery);
         
@@ -536,8 +534,7 @@ class FileManager {
                      data-path="${item.path}" 
                      data-type="${item.type}"
                      data-name="${item.name}">
-                    <input type="checkbox" class="form-check-input selection-checkbox" 
-                           ${isSelected ? 'checked' : ''}>
+                    ${checkboxHtml}
                     <i class="${item.icon} file-icon"></i>
                     <div class="file-info">
                         <div class="file-name">${highlightedName}</div>
@@ -555,8 +552,7 @@ class FileManager {
                      data-path="${item.path}" 
                      data-type="${item.type}"
                      data-name="${item.name}">
-                    <input type="checkbox" class="form-check-input selection-checkbox" 
-                           ${isSelected ? 'checked' : ''}>
+                    ${checkboxHtml}
                     <i class="${item.icon} file-icon"></i>
                     <div class="file-name">${highlightedName}</div>
                     <div class="file-meta">
@@ -644,7 +640,9 @@ class FileManager {
         if (fileItem) {
             fileItem.classList.toggle('selected', selected);
             const checkbox = fileItem.querySelector('.selection-checkbox');
-            if (checkbox) checkbox.checked = selected;
+            if (checkbox) {
+                checkbox.checked = selected;
+            }
         }
         
         this.updateSelectionUI();
@@ -658,7 +656,9 @@ class FileManager {
         document.querySelectorAll('.file-item.selected').forEach(item => {
             item.classList.remove('selected');
             const checkbox = item.querySelector('.selection-checkbox');
-            if (checkbox) checkbox.checked = false;
+            if (checkbox) {
+                checkbox.checked = false;
+            }
         });
         this.updateSelectionUI();
     }
@@ -970,12 +970,7 @@ class FileManager {
         
         switch (action) {
             case 'open':
-                if (isDirectory) {
-                    this.navigateToPath(path);
-                } else {
-                    // For files, open in new tab (download)
-                    this.downloadItem(path, false);
-                }
+                this.openItem(path, isDirectory);
                 break;
                 
             case 'download':
@@ -1041,8 +1036,16 @@ class FileManager {
                     
                     this.showSuccess('Folder download started');
                 } else {
-                    const errorData = await response.json();
-                    this.showError(errorData.message || 'Failed to download folder');
+                    // Handle error response
+                    let errorMessage = 'Failed to download folder';
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.message || errorMessage;
+                    } catch (e) {
+                        // If response is not JSON, use status text
+                        errorMessage = response.statusText || errorMessage;
+                    }
+                    this.showError(errorMessage);
                 }
             } else {
                 // For files, get the download URL from the API
@@ -1075,8 +1078,16 @@ class FileManager {
                     window.URL.revokeObjectURL(url);
                     this.showSuccess('Download started');
                 } else {
-                    const errorData = await response.json();
-                    this.showError(errorData.message || 'Failed to download file');
+                    // Handle error response
+                    let errorMessage = 'Failed to download file';
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.message || errorMessage;
+                    } catch (e) {
+                        // If response is not JSON, use status text
+                        errorMessage = response.statusText || errorMessage;
+                    }
+                    this.showError(errorMessage);
                 }
             }
         } catch (error) {
@@ -1112,8 +1123,16 @@ class FileManager {
                         this.showError('Failed to get file URL');
                     }
                 } else {
-                    const errorData = await response.json();
-                    this.showError(errorData.message || 'Failed to open file');
+                    // Handle error response
+                    let errorMessage = 'Failed to open file';
+                    try {
+                        const errorData = await response.json();
+                        errorMessage = errorData.message || errorMessage;
+                    } catch (e) {
+                        // If response is not JSON, use status text
+                        errorMessage = response.statusText || errorMessage;
+                    }
+                    this.showError(errorMessage);
                 }
             }
         } catch (error) {
@@ -1766,11 +1785,27 @@ class FileManager {
         document.getElementById('confirmDeleteBtn').disabled = true;
         
         if (isBulk) {
+            // Check if any selected items are folders
+            const hasFolders = items.some(item => {
+                const fileItem = document.querySelector(`[data-path="${item.path}"]`);
+                return fileItem ? fileItem.dataset.type === 'folder' : false;
+            });
+            
             // Bulk delete
             document.getElementById('deleteBulkContent').classList.remove('d-none');
             document.getElementById('bulkItemCount').textContent = items.length;
-            document.getElementById('confirmDeleteBtn').disabled = false;
-            this.deleteData = { type: 'bulk', items };
+            
+            if (hasFolders) {
+                // Show confirmation input for bulk delete with folders
+                document.getElementById('bulkConfirmationSection').classList.remove('d-none');
+                document.getElementById('confirmDeleteBtn').disabled = true;
+                this.deleteData = { type: 'bulk_with_folders', items, requiresConfirmation: true };
+            } else {
+                // Hide confirmation input for files only
+                document.getElementById('bulkConfirmationSection').classList.add('d-none');
+                document.getElementById('confirmDeleteBtn').disabled = false;
+                this.deleteData = { type: 'bulk', items };
+            }
         } else {
             // Single item delete
             const item = items[0];
@@ -1806,27 +1841,44 @@ class FileManager {
     }
     
     /**
-     * Validate folder name input
+     * Validate folder name input and bulk confirmation
      */
     validateFolderName() {
-        const input = document.getElementById('confirmFolderName');
+        const folderNameInput = document.getElementById('confirmFolderName');
+        const bulkConfirmInput = document.getElementById('confirmBulkDelete');
         const confirmBtn = document.getElementById('confirmDeleteBtn');
         
         if (this.deleteData && this.deleteData.type === 'folder') {
-            const isValid = input.value === this.deleteData.requiredName;
+            const isValid = folderNameInput.value === this.deleteData.requiredName;
             confirmBtn.disabled = !isValid;
             
             // Visual feedback
-            if (input.value.length > 0) {
+            if (folderNameInput.value.length > 0) {
                 if (isValid) {
-                    input.classList.remove('is-invalid');
-                    input.classList.add('is-valid');
+                    folderNameInput.classList.remove('is-invalid');
+                    folderNameInput.classList.add('is-valid');
                 } else {
-                    input.classList.remove('is-valid');
-                    input.classList.add('is-invalid');
+                    folderNameInput.classList.remove('is-valid');
+                    folderNameInput.classList.add('is-invalid');
                 }
             } else {
-                input.classList.remove('is-valid', 'is-invalid');
+                folderNameInput.classList.remove('is-valid', 'is-invalid');
+            }
+        } else if (this.deleteData && this.deleteData.type === 'bulk_with_folders') {
+            const isValid = bulkConfirmInput.value === 'I confirm';
+            confirmBtn.disabled = !isValid;
+            
+            // Visual feedback
+            if (bulkConfirmInput.value.length > 0) {
+                if (isValid) {
+                    bulkConfirmInput.classList.remove('is-invalid');
+                    bulkConfirmInput.classList.add('is-valid');
+                } else {
+                    bulkConfirmInput.classList.remove('is-valid');
+                    bulkConfirmInput.classList.add('is-invalid');
+                }
+            } else {
+                bulkConfirmInput.classList.remove('is-valid', 'is-invalid');
             }
         }
     }
@@ -1838,7 +1890,7 @@ class FileManager {
         if (!this.deleteData) return;
         
         try {
-            if (this.deleteData.type === 'bulk') {
+            if (this.deleteData.type === 'bulk' || this.deleteData.type === 'bulk_with_folders') {
                 await this.performBulkDelete(this.deleteData.items);
             } else {
                 await this.performSingleDelete(this.deleteData.item);
@@ -1848,7 +1900,7 @@ class FileManager {
             bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
             this.showSuccess('Item(s) deleted successfully');
             
-            if (this.deleteData.type === 'bulk') {
+            if (this.deleteData.type === 'bulk' || this.deleteData.type === 'bulk_with_folders') {
                 this.clearSelection();
             }
             

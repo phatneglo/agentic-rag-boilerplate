@@ -35,18 +35,56 @@ class ChatArtifacts {
     }
 
     /**
-     * Set up event listeners for artifact interactions
+     * Set up event listeners
      */
     setupEventListeners() {
-        // Close sidebar button
-        const closeSidebarBtn = document.getElementById('closeSidebarBtn');
-        if (closeSidebarBtn) {
-            closeSidebarBtn.addEventListener('click', () => this.hideSidebar());
-        }
-        
-        // Keyboard shortcuts
+        // Artifact button clicks using event delegation
+        document.addEventListener('click', (e) => {
+            // Handle artifact button clicks
+            const artifactButton = e.target.closest('.artifact-button');
+            if (artifactButton) {
+                e.preventDefault();
+                const artifactId = artifactButton.getAttribute('data-artifact-id');
+                if (artifactId) {
+                    this.showArtifact(artifactId);
+                }
+                return;
+            }
+            
+            // Handle view artifact button clicks  
+            const viewButton = e.target.closest('.view-artifact');
+            if (viewButton) {
+                e.preventDefault();
+                e.stopPropagation();
+                const artifactButton = viewButton.closest('.artifact-button');
+                if (artifactButton) {
+                    const artifactId = artifactButton.getAttribute('data-artifact-id');
+                    if (artifactId) {
+                        this.showArtifact(artifactId);
+                    }
+                }
+                return;
+            }
+            
+            // Handle sidebar close
+            if (e.target.closest('.close-sidebar')) {
+                this.hideSidebar();
+                return;
+            }
+            
+            // Handle preview toggle
+            if (e.target.closest('.preview-toggle')) {
+                const artifactId = e.target.closest('.artifact-viewer').getAttribute('data-artifact-id');
+                if (artifactId) {
+                    this.togglePreview(artifactId);
+                }
+                return;
+            }
+        });
+
+        // Escape key to close sidebar
         document.addEventListener('keydown', (e) => {
-            if (e.key === 'Escape' && this.sidebar && this.sidebar.classList.contains('show')) {
+            if (e.key === 'Escape' && this.sidebar && !this.sidebar.classList.contains('d-none')) {
                 this.hideSidebar();
             }
         });
@@ -113,18 +151,33 @@ class ChatArtifacts {
         const header = this.createArtifactHeader(artifact);
         let content = '';
 
+        const viewMode = artifact.viewMode || 'preview';
+        const showCode = viewMode === 'code';
+
         switch (artifact.type) {
             case 'code':
                 content = this.createCodeArtifact(artifact);
                 break;
             case 'mermaid':
-                content = this.createMermaidArtifact(artifact);
+                if (showCode) {
+                    content = this.createCodeView(artifact.content, 'mermaid');
+                } else {
+                    content = this.createMermaidArtifact(artifact);
+                }
                 break;
             case 'html':
-                content = this.createHtmlArtifact(artifact);
+                if (showCode) {
+                    content = this.createCodeView(artifact.content, 'html');
+                } else {
+                    content = this.createHtmlArtifact(artifact);
+                }
                 break;
             case 'markdown':
-                content = this.createMarkdownArtifact(artifact);
+                if (showCode) {
+                    content = this.createCodeView(artifact.content, 'markdown');
+                } else {
+                    content = this.createMarkdownArtifact(artifact);
+                }
                 break;
             case 'json':
                 content = this.createJsonArtifact(artifact);
@@ -136,7 +189,7 @@ class ChatArtifacts {
         return `
             <div class="artifact-viewer" data-artifact-id="${artifact.id}">
                 ${header}
-                <div class="artifact-content">
+                <div class="artifact-content" data-view="${viewMode}">
                     ${content}
                 </div>
             </div>
@@ -144,12 +197,26 @@ class ChatArtifacts {
     }
 
     /**
-     * Create artifact header with title and actions
+     * Create artifact header with title, actions, and preview toggle
      */
     createArtifactHeader(artifact) {
+        const hasPreview = ['html', 'mermaid', 'markdown'].includes(artifact.type);
+        
         return `
             <div class="artifact-header">
-                <div class="artifact-title">${artifact.title}</div>
+                <div class="artifact-title-section">
+                    <div class="artifact-title">${artifact.title}</div>
+                    ${hasPreview ? `
+                        <div class="artifact-view-toggle">
+                            <button class="toggle-btn active" data-view="preview" onclick="chatArtifacts.switchView('${artifact.id}', 'preview')">
+                                <i class="fas fa-eye"></i> Preview
+                            </button>
+                            <button class="toggle-btn" data-view="code" onclick="chatArtifacts.switchView('${artifact.id}', 'code')">
+                                <i class="fas fa-code"></i> Code
+                            </button>
+                        </div>
+                    ` : ''}
+                </div>
                 <div class="artifact-actions">
                     <button class="artifact-action-btn" onclick="chatArtifacts.copyArtifact('${artifact.id}')" title="Copy">
                         <i class="fas fa-copy"></i>
@@ -494,17 +561,49 @@ class ChatArtifacts {
     }
 
     /**
-     * Create artifact button for messages
+     * Create artifact button HTML
      */
     createArtifactButton(artifact) {
         const iconClass = this.getArtifactIcon(artifact.type);
+        const typeLabel = this.getArtifactTypeLabel(artifact.type);
+        
+        // Use the specific title from the artifact, not just a generic type
+        const displayTitle = artifact.title || `${typeLabel} Artifact`;
+        
         return `
-            <div class="artifact-button" onclick="chatArtifacts.showArtifact('${artifact.id}')">
-                <i class="${iconClass}"></i>
-                <span>${artifact.title}</span>
-                <small class="text-muted ms-2">• Click to view</small>
+            <div class="artifact-button" data-artifact-id="${artifact.id}">
+                <div class="artifact-button-content">
+                    <div class="artifact-icon">
+                        <i class="${iconClass}"></i>
+                    </div>
+                    <div class="artifact-info">
+                        <div class="artifact-title">${displayTitle}</div>
+                        <div class="artifact-type">${typeLabel}${artifact.language ? ` (${artifact.language})` : ''}</div>
+                    </div>
+                    <div class="artifact-actions">
+                        <button class="btn btn-sm btn-outline-primary view-artifact">
+                            <i class="fas fa-eye"></i>
+                            View
+                        </button>
+                    </div>
+                </div>
             </div>
         `;
+    }
+
+    /**
+     * Get artifact type label for display
+     */
+    getArtifactTypeLabel(type) {
+        const labels = {
+            'code': 'Code',
+            'document': 'Document', 
+            'html': 'Web Page',
+            'mermaid': 'Diagram',
+            'markdown': 'Markdown',
+            'text': 'Text File'
+        };
+        return labels[type] || 'Artifact';
     }
 
     /**
@@ -632,6 +731,54 @@ class ChatArtifacts {
     clearArtifacts() {
         this.artifacts.clear();
         this.hideSidebar();
+    }
+
+    /**
+     * Update streaming artifact content
+     */
+    updateStreamingArtifact(artifactId, content) {
+        const artifact = this.artifacts.get(artifactId);
+        if (!artifact) return;
+        
+        // Update content
+        artifact.content = content;
+        artifact.updated = new Date();
+        
+        // Re-render if currently displayed
+        if (this.currentArtifact && this.currentArtifact.id === artifactId) {
+            this.renderArtifact(artifact);
+        }
+    }
+
+    /**
+     * Switch between preview and code view
+     */
+    switchView(artifactId, view) {
+        const artifact = this.artifacts.get(artifactId);
+        if (!artifact) return;
+        
+        // Update artifact view mode
+        artifact.viewMode = view;
+        
+        // Update toggle buttons
+        const header = this.sidebarContent.querySelector('.artifact-header');
+        if (header) {
+            const toggleBtns = header.querySelectorAll('.toggle-btn');
+            toggleBtns.forEach(btn => {
+                btn.classList.toggle('active', btn.dataset.view === view);
+            });
+        }
+        
+        // Re-render content with new view
+        this.renderArtifact(artifact);
+    }
+
+    /**
+     * Create code view for any content type
+     */
+    createCodeView(content, language) {
+        const escapedContent = this.escapeHtml(content);
+        return `<pre><code class="language-${language}">${escapedContent}</code></pre>`;
     }
 }
 

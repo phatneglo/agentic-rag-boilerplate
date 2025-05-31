@@ -1,5 +1,6 @@
 """
 Agent Orchestrator - LangGraph-based orchestration system for specialized agents.
+Based on LangGraph agentic RAG best practices.
 """
 
 import asyncio
@@ -8,95 +9,171 @@ from typing_extensions import Annotated
 
 from langgraph.graph import StateGraph, START, END
 from langgraph.graph.message import add_messages
+from langgraph.prebuilt import ToolNode, tools_condition
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI
 
 from app.agents.base_agent import AgentResponse, ArtifactType
 from app.agents.agents.code_agent import CodeAgent
-from app.agents.agents.diagram_agent import DiagramAgent
-from app.agents.agents.analysis_agent import AnalysisAgent
 from app.agents.agents.document_agent import DocumentAgent
-from app.agents.agents.visualization_agent import VisualizationAgent
 from app.agents.agents.general_agent import GeneralAgent
+from app.agents.agents.minio_agent import MinIOAgent
+from app.agents.agents.typesense_agent import TypeSenseAgent
+from app.agents.agents.qdrant_agent import QdrantAgent
+from app.agents.agents.file_display_agent import FileDisplayAgent
+from app.core.config import get_settings
 from app.core.logging_config import get_logger
 
 logger = get_logger(__name__)
+settings = get_settings()
 
 
-class OrchestrationState(TypedDict):
-    """State for the agent orchestration workflow."""
-    user_input: str
-    context: Dict[str, Any]
-    selected_agents: List[str]
-    agent_responses: Dict[str, AgentResponse]
-    final_response: Optional[AgentResponse]
+class MessagesState(TypedDict):
+    """State for the agent orchestration workflow following LangGraph best practices."""
     messages: Annotated[list, add_messages]
+    selected_agent: Optional[str]
+    context: Dict[str, Any]
+    config: Dict[str, Any]
 
 
 class AgentOrchestrator:
     """
     LangGraph-based orchestrator for coordinating specialized agents.
-    Routes requests to appropriate agents and combines responses.
+    Follows the agentic RAG pattern from LangGraph tutorials.
     """
     
     def __init__(self):
-        # Initialize all specialized agents
+        # Initialize specialized agents (focused and simplified)
         self.agents = {
             "general": GeneralAgent(),
             "code": CodeAgent(),
-            "diagram": DiagramAgent(),
-            "analysis": AnalysisAgent(),
             "document": DocumentAgent(),
-            "visualization": VisualizationAgent()
+            "minio": MinIOAgent(),
+            "typesense": TypeSenseAgent(),
+            "qdrant": QdrantAgent(),
+            "file_display": FileDisplayAgent()
         }
+        
+        # Initialize routing LLM
+        self.routing_llm = ChatOpenAI(
+            model="gpt-4-turbo-preview",
+            temperature=0,
+            api_key=settings.openai_api_key
+        )
         
         # Build the orchestration graph
         self.workflow = self._build_workflow()
         
-        logger.info("Agent Orchestrator initialized with all specialized agents")
+        logger.info("Agent Orchestrator initialized with simplified agents")
     
     def _build_workflow(self) -> StateGraph:
-        """Build the LangGraph workflow for agent orchestration."""
+        """Build the LangGraph workflow for agent orchestration following best practices."""
         
         # Define the workflow graph
-        workflow = StateGraph(OrchestrationState)
+        workflow = StateGraph(MessagesState)
         
-        # Add nodes
-        workflow.add_node("route_request", self._route_request)
-        workflow.add_node("execute_agents", self._execute_agents)
-        workflow.add_node("combine_responses", self._combine_responses)
+        # Add nodes following the agentic pattern
+        workflow.add_node("route_agent", self._route_agent)
+        workflow.add_node("execute_general", self._execute_general)
+        workflow.add_node("execute_code", self._execute_code)
+        workflow.add_node("execute_document", self._execute_document)
+        workflow.add_node("execute_minio", self._execute_minio)
+        workflow.add_node("execute_typesense", self._execute_typesense)
+        workflow.add_node("execute_qdrant", self._execute_qdrant)
+        workflow.add_node("execute_file_display", self._execute_file_display)
         
-        # Add edges
-        workflow.add_edge(START, "route_request")
-        workflow.add_edge("route_request", "execute_agents")
-        workflow.add_edge("execute_agents", "combine_responses")
-        workflow.add_edge("combine_responses", END)
+        # Add edges following the routing pattern
+        workflow.add_edge(START, "route_agent")
+        
+        # Add conditional edges for agent routing
+        workflow.add_conditional_edges(
+            "route_agent",
+            self._agent_router,
+            {
+                "general": "execute_general",
+                "code": "execute_code", 
+                "document": "execute_document",
+                "minio": "execute_minio",
+                "typesense": "execute_typesense",
+                "qdrant": "execute_qdrant",
+                "file_display": "execute_file_display"
+            }
+        )
+        
+        # All execution nodes lead to END
+        workflow.add_edge("execute_general", END)
+        workflow.add_edge("execute_code", END)
+        workflow.add_edge("execute_document", END)
+        workflow.add_edge("execute_minio", END)
+        workflow.add_edge("execute_typesense", END)
+        workflow.add_edge("execute_qdrant", END)
+        workflow.add_edge("execute_file_display", END)
         
         return workflow.compile()
     
-    async def process_request(self, user_input: str, context: Dict[str, Any] = None) -> AgentResponse:
+    async def process_request(self, user_input: str, context: Dict[str, Any] = None, config: Dict[str, Any] = None) -> AgentResponse:
         """
-        Process user request through the agent orchestration workflow.
+        Process user request through the agent orchestration workflow with streaming support.
         """
         try:
-            logger.info(f"Orchestrating request: {user_input[:100]}...")
+            logger.info(f"🚀 ORCHESTRATOR: Processing: {user_input[:100]}...")
             
-            # Initialize state
+            # Initialize state following LangGraph patterns
             initial_state = {
-                "user_input": user_input,
+                "messages": [HumanMessage(content=user_input)],
+                "selected_agent": None,
                 "context": context or {},
-                "selected_agents": [],
-                "agent_responses": {},
-                "final_response": None,
-                "messages": [HumanMessage(content=user_input)]
+                "config": config or {}
             }
             
-            # Execute the workflow
-            final_state = await self.workflow.ainvoke(initial_state)
+            # Execute workflow with streaming support
+            if config and config.get("callbacks"):
+                logger.info("🔥 ORCHESTRATOR: Real-time streaming mode enabled")
+                
+                # Use astream for streaming
+                final_state = None
+                async for chunk in self.workflow.astream(initial_state, config=config):
+                    # Process streaming chunks
+                    if chunk and isinstance(chunk, dict):
+                        # Get the latest state
+                        for node_name, node_state in chunk.items():
+                            if node_name.startswith("execute_") and "messages" in node_state:
+                                final_state = node_state
+                                break
+                
+                if not final_state:
+                    # Fallback to regular invoke
+                    final_state = await self.workflow.ainvoke(initial_state, config=config)
+            else:
+                # Regular execution
+                final_state = await self.workflow.ainvoke(initial_state, config=config)
             
-            return final_state["final_response"]
+            # Extract response from final state
+            if final_state and "messages" in final_state:
+                last_message = final_state["messages"][-1]
+                if hasattr(last_message, 'content'):
+                    return AgentResponse(
+                        success=True,
+                        content=last_message.content,
+                        artifacts=[],
+                        metadata={
+                            "primary_agent": final_state.get("selected_agent", "general"),
+                            "orchestrator": "langgraph"
+                        }
+                    )
+            
+            # Fallback response
+            return AgentResponse(
+                success=False,
+                content="",
+                artifacts=[],
+                metadata={"orchestrator": "error"},
+                error="Failed to process request"
+            )
             
         except Exception as e:
-            logger.error(f"Error in orchestration: {e}")
+            logger.error(f"❌ ORCHESTRATOR ERROR: {e}")
             return AgentResponse(
                 success=False,
                 content="",
@@ -105,162 +182,144 @@ class AgentOrchestrator:
                 error=str(e)
             )
     
-    async def _route_request(self, state: OrchestrationState) -> OrchestrationState:
-        """Route the request to appropriate agents based on content analysis."""
+    async def _route_agent(self, state: MessagesState) -> MessagesState:
+        """Route request to appropriate agent using AI-powered routing."""
         
-        # Score each agent's capability to handle the request
-        agent_scores = {}
+        user_input = state["messages"][-1].content
         
-        for agent_name, agent in self.agents.items():
-            if agent.can_handle(state["user_input"]):
-                # Calculate a score based on keyword matches
-                keywords = agent.extract_keywords(state["user_input"])
-                score = len(keywords)
-                
-                # Boost score for more specific matches
-                if any(kw.lower() in state["user_input"].lower() for capability in agent.capabilities for kw in capability.keywords):
-                    score += 2
-                
-                # Give general agent higher priority for short conversational inputs
-                if agent_name == "general" and len(state["user_input"].split()) <= 5:
-                    score += 3
-                
-                agent_scores[agent_name] = score
+        # Create routing prompt
+        routing_prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are an AI agent router. Based on the user's request, select the most appropriate agent.
+
+Available agents:
+- general: For greetings, conversations, help, and general questions
+- code: For programming, coding, software development tasks
+- document: For creating formal documents, reports, guides, documentation
+- minio: For file storage, management, object storage operations
+- typesense: For search, indexing, finding information
+- qdrant: For RAG, knowledge retrieval, question answering based on documents
+- file_display: For reading, viewing, analyzing file contents
+
+Rules:
+1. For simple greetings or conversations (hi, hello, how are you), choose 'general'
+2. For programming tasks (write code, create function), choose 'code'
+3. For document creation (write report, create guide), choose 'document'
+4. For file operations (upload, store, manage files), choose 'minio'
+5. For search tasks (find, search, look for), choose 'typesense'
+6. For knowledge questions (what is, explain, based on), choose 'qdrant'
+7. For file reading (read file, show content), choose 'file_display'
+
+Response format: Just the agent name (e.g., "general")"""),
+            ("human", "Route this request: {user_input}")
+        ])
         
-        # Select agents with scores above threshold
-        threshold = 1
-        selected_agents = [name for name, score in agent_scores.items() if score >= threshold]
+        # Get routing decision
+        chain = routing_prompt | self.routing_llm
+        response = await chain.ainvoke({"user_input": user_input})
         
-        # If no agents selected, default to general agent for conversation
-        if not selected_agents:
-            if agent_scores:
-                best_agent = max(agent_scores, key=agent_scores.get)
-                selected_agents = [best_agent]
-            else:
-                selected_agents = ["general"]  # Default to general conversation
+        selected_agent = response.content.strip().lower()
         
-        # Prioritize general agent for simple inputs
-        if "general" in selected_agents and len(state["user_input"].split()) <= 5:
-            selected_agents = ["general"]
+        # Validate agent selection
+        if selected_agent not in self.agents:
+            selected_agent = "general"  # Default fallback
         
-        # Limit to top 2 agents to avoid overwhelming responses
-        selected_agents = selected_agents[:2]
+        logger.info(f"🎯 ROUTER: Selected '{selected_agent}' for: '{user_input[:50]}...'")
         
-        state["selected_agents"] = selected_agents
-        
-        logger.info(f"Selected agents: {selected_agents} (scores: {agent_scores})")
-        
+        state["selected_agent"] = selected_agent
         return state
     
-    async def _execute_agents(self, state: OrchestrationState) -> OrchestrationState:
-        """Execute the selected agents in parallel."""
-        
-        async def execute_agent(agent_name: str) -> tuple[str, AgentResponse]:
-            try:
-                agent = self.agents[agent_name]
-                response = await agent.process_request(state["user_input"], state["context"])
-                return agent_name, response
-            except Exception as e:
-                logger.error(f"Error executing {agent_name} agent: {e}")
-                return agent_name, AgentResponse(
-                    success=False,
-                    content="",
-                    artifacts=[],
-                    metadata={"agent": agent_name},
-                    error=str(e)
-                )
-        
-        # Execute agents in parallel
-        tasks = [execute_agent(agent_name) for agent_name in state["selected_agents"]]
-        results = await asyncio.gather(*tasks)
-        
-        # Store responses
-        state["agent_responses"] = dict(results)
-        
-        return state
+    def _agent_router(self, state: MessagesState) -> str:
+        """Return the selected agent for conditional routing."""
+        return state.get("selected_agent", "general")
     
-    async def _combine_responses(self, state: OrchestrationState) -> OrchestrationState:
-        """Combine responses from multiple agents into a cohesive final response."""
-        
-        successful_responses = [
-            response for response in state["agent_responses"].values() 
-            if response.success
-        ]
-        
-        if not successful_responses:
-            # All agents failed
-            state["final_response"] = AgentResponse(
-                success=False,
-                content="I apologize, but I wasn't able to process your request successfully.",
-                artifacts=[],
-                metadata={"orchestrator": "all_agents_failed"},
-                error="All selected agents failed to process the request"
-            )
-            return state
-        
-        # Combine content from successful responses
-        combined_content_parts = []
-        all_artifacts = []
-        combined_metadata = {"orchestrator": "combined", "agents_used": list(state["agent_responses"].keys())}
-        
-        for agent_name, response in state["agent_responses"].items():
-            if response.success:
-                if response.content:
-                    combined_content_parts.append(f"**{agent_name.title()} Agent Response:**\n{response.content}")
-                
-                all_artifacts.extend(response.artifacts)
-                combined_metadata.update(response.metadata)
-        
-        # Create final combined response
-        if len(successful_responses) == 1:
-            # Single agent response - use it directly but add orchestrator metadata
-            single_response = successful_responses[0]
-            state["final_response"] = AgentResponse(
-                success=True,
-                content=single_response.content,
-                artifacts=single_response.artifacts,
-                metadata={**single_response.metadata, **combined_metadata}
-            )
-        else:
-            # Multiple agents - combine responses
-            combined_content = "\n\n".join(combined_content_parts)
+    # Individual agent execution methods
+    async def _execute_general(self, state: MessagesState) -> MessagesState:
+        """Execute general agent."""
+        return await self._execute_agent("general", state)
+    
+    async def _execute_code(self, state: MessagesState) -> MessagesState:
+        """Execute code agent."""
+        return await self._execute_agent("code", state)
+    
+    async def _execute_document(self, state: MessagesState) -> MessagesState:
+        """Execute document agent."""
+        return await self._execute_agent("document", state)
+    
+    async def _execute_minio(self, state: MessagesState) -> MessagesState:
+        """Execute minio agent."""
+        return await self._execute_agent("minio", state)
+    
+    async def _execute_typesense(self, state: MessagesState) -> MessagesState:
+        """Execute typesense agent."""
+        return await self._execute_agent("typesense", state)
+    
+    async def _execute_qdrant(self, state: MessagesState) -> MessagesState:
+        """Execute qdrant agent."""
+        return await self._execute_agent("qdrant", state)
+    
+    async def _execute_file_display(self, state: MessagesState) -> MessagesState:
+        """Execute file display agent."""
+        return await self._execute_agent("file_display", state)
+    
+    async def _execute_agent(self, agent_name: str, state: MessagesState) -> MessagesState:
+        """Execute a specific agent with streaming support."""
+        try:
+            user_input = state["messages"][-1].content
+            agent = self.agents[agent_name]
             
-            state["final_response"] = AgentResponse(
-                success=True,
-                content=combined_content,
-                artifacts=all_artifacts,
-                metadata=combined_metadata
+            logger.info(f"🎯 EXECUTING: {agent_name} agent")
+            
+            # Execute agent with streaming config
+            config = state.get("config", {})
+            response = await agent.process_request(user_input, state.get("context", {}), config)
+            
+            if response.success:
+                # Add agent response to messages
+                ai_message = AIMessage(content=response.content)
+                state["messages"].append(ai_message)
+                
+                logger.info(f"✅ AGENT {agent_name}: Success")
+            else:
+                # Add error message
+                error_message = AIMessage(content=f"Sorry, I encountered an error: {response.error}")
+                state["messages"].append(error_message)
+                
+                logger.error(f"❌ AGENT {agent_name}: Failed - {response.error}")
+            
+            return state
+            
+        except Exception as e:
+            logger.error(f"❌ ERROR executing {agent_name}: {e}")
+            error_message = AIMessage(content=f"Sorry, I encountered an error while processing your request.")
+            state["messages"].append(error_message)
+            return state
+    
+    async def process_with_specific_agent(self, user_input: str, agent_name: str, context: Dict[str, Any] = None) -> AgentResponse:
+        """Process request with a specific agent (for compatibility)."""
+        if agent_name.lower() not in self.agents:
+            return AgentResponse(
+                success=False,
+                content="",
+                artifacts=[],
+                metadata={"agent": agent_name},
+                error=f"Agent '{agent_name}' not found"
             )
         
-        return state
+        agent = self.agents[agent_name.lower()]
+        return await agent.process_request(user_input, context or {})
     
     def get_agent_capabilities(self) -> Dict[str, str]:
-        """Get summary of all agent capabilities."""
-        capabilities = {}
-        for agent_name, agent in self.agents.items():
-            capabilities[agent_name] = agent.get_capabilities_summary()
-        return capabilities
+        """Get capabilities of all agents."""
+        return {
+            "general": "Conversations, greetings, general help",
+            "code": "Programming, coding, software development",
+            "document": "Document creation, reports, guides",
+            "minio": "File storage and management",
+            "typesense": "Search and indexing",
+            "qdrant": "RAG and knowledge retrieval",
+            "file_display": "File reading and content display"
+        }
     
     def get_available_agents(self) -> List[str]:
-        """Get list of available agent names."""
-        return list(self.agents.keys())
-    
-    def get_agent_for_artifact_type(self, artifact_type: ArtifactType) -> Optional[str]:
-        """Get the best agent for a specific artifact type."""
-        for agent_name, agent in self.agents.items():
-            for capability in agent.capabilities:
-                if artifact_type in capability.artifact_types:
-                    return agent_name
-        return None
-    
-    async def get_agent_suggestions(self, user_input: str) -> Dict[str, float]:
-        """Get suggestions for which agents could handle the request."""
-        suggestions = {}
-        
-        for agent_name, agent in self.agents.items():
-            if agent.can_handle(user_input):
-                keywords = agent.extract_keywords(user_input)
-                confidence = len(keywords) * 0.2  # Basic confidence scoring
-                suggestions[agent_name] = min(confidence, 1.0)
-        
-        return suggestions 
+        """Get list of available agents."""
+        return list(self.agents.keys()) 

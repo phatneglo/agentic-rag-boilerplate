@@ -67,7 +67,8 @@ class BaseAgent(ABC):
                 model=openai_config["model"],
                 temperature=openai_config["temperature"],
                 max_tokens=openai_config["max_tokens"],
-                api_key=openai_config["api_key"]
+                api_key=openai_config["api_key"],
+                streaming=True  # Enable streaming support
             )
         else:
             # Fallback for when API key is not available
@@ -81,7 +82,7 @@ class BaseAgent(ABC):
         pass
     
     @abstractmethod
-    async def process_request(self, user_input: str, context: Dict[str, Any] = None) -> AgentResponse:
+    async def process_request(self, user_input: str, context: Dict[str, Any] = None, config: Dict[str, Any] = None) -> AgentResponse:
         """Process user request and generate appropriate artifacts."""
         pass
     
@@ -90,8 +91,8 @@ class BaseAgent(ABC):
         """Determine if this agent can handle the given input."""
         pass
     
-    async def generate_response(self, user_input: str, system_prompt: str = None) -> str:
-        """Generate LLM response using GPT-4o mini."""
+    async def generate_response(self, user_input: str, system_prompt: str = None, config: Dict[str, Any] = None) -> str:
+        """Generate LLM response using GPT-4o mini with streaming support."""
         try:
             if not self.llm:
                 # Mock response when API key is not available
@@ -102,8 +103,22 @@ class BaseAgent(ABC):
                 HumanMessage(content=user_input)
             ]
             
-            response = await self.llm.ainvoke(messages)
-            return response.content
+            # Check if streaming is requested via config
+            if config and config.get("callbacks"):
+                logger.info(f"🚀 {self.name}: Starting real-time streaming with callbacks")
+                
+                # Use astream for real-time token streaming
+                full_response = ""
+                async for chunk in self.llm.astream(messages, config=config):
+                    if hasattr(chunk, 'content') and chunk.content:
+                        full_response += chunk.content
+                
+                logger.info(f"✅ {self.name}: Completed streaming - {len(full_response)} characters total")
+                return full_response
+            else:
+                # Regular non-streaming request
+                response = await self.llm.ainvoke(messages)
+                return response.content
             
         except Exception as e:
             logger.error(f"Error generating response in {self.name}: {e}")

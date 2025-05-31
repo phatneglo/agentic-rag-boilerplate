@@ -87,6 +87,9 @@ Your capabilities include:
 - Writing clean, efficient, and well-documented code
 - Supporting multiple programming languages (Python, JavaScript, SQL, Java, C++, etc.)
 - Creating functions, classes, algorithms, and complete applications
+- Generating data structures, lists, tables, and datasets
+- Data manipulation, sorting, filtering, and formatting
+- Creating CSV files, JSON data, database records
 - Following best practices and coding standards
 - Providing explanations and comments in code
 
@@ -96,33 +99,35 @@ When generating code:
 3. Follow language-specific best practices
 4. Handle edge cases and errors appropriately
 5. Provide example usage when relevant
+6. For data requests, create realistic and useful sample data
+7. Include proper data validation and error handling
 
 Always structure your response as:
 1. Brief explanation of what the code does
 2. The actual code artifact
 3. Usage examples or additional notes if helpful
 
-Focus on creating practical, working code that solves the user's specific requirements."""
+Focus on creating practical, working code that solves the user's specific requirements. For data generation requests, create comprehensive datasets with meaningful sample data."""
     
     def can_handle(self, user_input: str) -> bool:
         """Check if this agent can handle the user request."""
-        keywords = self.extract_keywords(user_input)
+        user_lower = user_input.lower()
         
-        # Check for programming-related terms
-        code_indicators = [
-            "code", "function", "script", "program", "algorithm",
-            "implementation", "python", "javascript", "sql", "java",
-            "write", "create", "generate", "build", "develop"
+        # Only handle very explicit coding requests
+        explicit_code_requests = [
+            "write code", "create function", "implement function", 
+            "program this", "code for", "write a program",
+            "create a script", "implement algorithm"
         ]
         
-        user_lower = user_input.lower()
-        for indicator in code_indicators:
-            if indicator in user_lower:
+        # Check for explicit code requests
+        for request in explicit_code_requests:
+            if request in user_lower:
                 return True
         
-        return len(keywords) > 0
+        return False
     
-    async def process_request(self, user_input: str, context: Dict[str, Any] = None) -> AgentResponse:
+    async def process_request(self, user_input: str, context: Dict[str, Any] = None, config: Dict[str, Any] = None) -> AgentResponse:
         """Process code generation request."""
         try:
             logger.info(f"Code Agent processing request: {user_input[:100]}...")
@@ -130,8 +135,8 @@ Focus on creating practical, working code that solves the user's specific requir
             # Detect programming language
             language = self._detect_language(user_input)
             
-            # Generate code response
-            response_content = await self.generate_response(user_input)
+            # Generate code response with streaming support
+            response_content = await self.generate_response(user_input, config=config)
             
             # Extract code blocks from response
             code_blocks = self._extract_code_blocks(response_content)
@@ -221,6 +226,40 @@ Focus on creating practical, working code that solves the user's specific requir
                 "content": code.strip()
             })
         
+        # Also check for HTML content outside of code blocks
+        if not code_blocks:
+            # Look for HTML patterns
+            html_patterns = [
+                r'<!DOCTYPE[^>]*>.*?</html>',
+                r'<html[^>]*>.*?</html>',
+                r'<(!DOCTYPE\s+html|html)[^>]*>.*',
+            ]
+            
+            for pattern in html_patterns:
+                html_match = re.search(pattern, content, re.DOTALL | re.IGNORECASE)
+                if html_match:
+                    code_blocks.append({
+                        "language": "html",
+                        "content": html_match.group(0).strip()
+                    })
+                    break
+            
+            # Look for substantial code-like content (multiple lines with code indicators)
+            if not code_blocks:
+                lines = content.split('\n')
+                code_lines = []
+                code_indicators = ['function', 'const', 'let', 'var', 'class', 'def', 'import', '<', '>', '{', '}', ';', '=']
+                
+                for line in lines:
+                    if any(indicator in line for indicator in code_indicators):
+                        code_lines.append(line)
+                
+                if len(code_lines) > 3:  # If we have substantial code content
+                    code_blocks.append({
+                        "language": "text",
+                        "content": '\n'.join(code_lines)
+                    })
+        
         return code_blocks
     
     def _clean_code_content(self, content: str) -> str:
@@ -246,15 +285,66 @@ Focus on creating practical, working code that solves the user's specific requir
     
     def _clean_response_content(self, content: str) -> str:
         """Clean response content for display."""
-        # Remove code blocks but keep explanatory text
+        # Remove code blocks (fenced with ```)
         cleaned = re.sub(r'```\w*\n.*?\n```', '[Code artifact generated]', content, flags=re.DOTALL)
+        
+        # Remove HTML content that spans multiple lines
+        cleaned = re.sub(r'<html.*?</html>', '[HTML artifact generated]', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        cleaned = re.sub(r'<!DOCTYPE.*?</html>', '[HTML artifact generated]', cleaned, flags=re.DOTALL | re.IGNORECASE)
+        
+        # Remove large blocks of HTML/XML content (more than 3 lines with HTML tags)
+        lines = cleaned.split('\n')
+        filtered_lines = []
+        html_block_lines = 0
+        in_html_block = False
+        
+        for line in lines:
+            # Check if line contains HTML tags
+            if re.search(r'<[^>]+>', line):
+                html_block_lines += 1
+                in_html_block = True
+            else:
+                if in_html_block and html_block_lines > 2:
+                    # We were in an HTML block with more than 2 lines, replace it
+                    filtered_lines.append('[Code artifact generated]')
+                    in_html_block = False
+                    html_block_lines = 0
+                elif not in_html_block:
+                    filtered_lines.append(line)
+                    
+                if in_html_block:
+                    in_html_block = False
+                    html_block_lines = 0
+                    
+        # Handle case where HTML block goes to end of content
+        if in_html_block and html_block_lines > 2:
+            filtered_lines.append('[Code artifact generated]')
+            
+        cleaned = '\n'.join(filtered_lines)
+        
+        # Remove any remaining single-line HTML tags if they're standalone
+        cleaned = re.sub(r'^\s*<[^>]+>\s*$', '', cleaned, flags=re.MULTILINE)
+        
+        # Clean up extra whitespace and empty lines
+        cleaned = re.sub(r'\n\s*\n\s*\n', '\n\n', cleaned)
+        
         return cleaned.strip()
     
     def _generate_title(self, user_input: str) -> str:
         """Generate a descriptive title for the code artifact."""
         user_lower = user_input.lower()
         
-        if "function" in user_lower:
+        if "list" in user_lower or "table" in user_lower or "data" in user_lower:
+            # Data generation requests
+            if "dog" in user_lower:
+                return "Dog Breed Database Generator"
+            elif "animal" in user_lower:
+                return "Animal Data Generator"
+            elif "user" in user_lower:
+                return "User Data Generator"
+            else:
+                return "Data Table Generator"
+        elif "function" in user_lower:
             return "Function Implementation"
         elif "class" in user_lower:
             return "Class Definition" 

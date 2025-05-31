@@ -288,6 +288,7 @@ For more information, check the [documentation](https://example.com).`
             console.log('WebSocket message received:', message);
             
             switch (message.type) {
+                // Legacy message types (keep for compatibility)
                 case 'chat_response':
                     this.emit('chat_response', message);
                     break;
@@ -297,12 +298,32 @@ For more information, check the [documentation](https://example.com).`
                 case 'typing_stop':
                     this.emit('typing_stop');
                     break;
+                    
+                // New streaming message types
+                case 'response_start':
+                    this.emit('response_start', message);
+                    break;
+                case 'agent_thinking':
+                    this.emit('agent_thinking', message);
+                    break;
+                case 'agent_streaming':
+                    this.emit('agent_streaming', message);
+                    break;
+                case 'response_complete':
+                    this.emit('response_complete', message);
+                    break;
+                case 'agent_error':
+                    this.emit('agent_error', message);
+                    break;
+                    
+                // System messages
                 case 'error':
                     this.emit('error', message);
                     break;
                 case 'pong':
                     this.emit('pong', message);
                     break;
+                    
                 default:
                     console.warn('Unknown message type:', message.type);
             }

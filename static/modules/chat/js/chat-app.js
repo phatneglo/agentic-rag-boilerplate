@@ -24,6 +24,11 @@ class ChatApp {
         this.isTyping = false;
         this.isGenerating = false;
         this.currentRequestId = null;
+        this.stopSignalSent = false;
+        
+        // Streaming state
+        this.currentStreamingMessage = null;
+        this.currentStreamingArtifacts = null;
         
         this.init();
     }
@@ -163,6 +168,65 @@ class ChatApp {
                 this.updateConnectionStatus(false);
             });
 
+            // Multi-agent streaming events
+            this.wsManager.on('agent_thinking', (data) => {
+                this.handleAgentThinking(data);
+            });
+
+            this.wsManager.on('agent_streaming', (data) => {
+                this.handleContentChunk(data);  // Reuse existing content handler
+            });
+
+            this.wsManager.on('agent_content_chunk', (data) => {
+                this.handleAgentContentChunk(data);
+            });
+
+            this.wsManager.on('agent_artifact_start', (data) => {
+                this.handleAgentArtifactStart(data);
+            });
+
+            this.wsManager.on('agent_artifact_chunk', (data) => {
+                this.handleAgentArtifactChunk(data);
+            });
+
+            this.wsManager.on('agent_error', (data) => {
+                this.handleAgentError(data);
+            });
+
+            // Legacy streaming events (for backward compatibility)
+            this.wsManager.on('thinking_status', (data) => {
+                this.handleThinkingStatus(data);
+            });
+
+            this.wsManager.on('response_start', (data) => {
+                this.handleResponseStart(data);
+            });
+
+            this.wsManager.on('content_chunk', (data) => {
+                this.handleContentChunk(data);
+            });
+
+            this.wsManager.on('artifact_start', (data) => {
+                this.handleArtifactStart(data);
+            });
+
+            this.wsManager.on('artifact_chunk', (data) => {
+                this.handleArtifactChunk(data);
+            });
+
+            this.wsManager.on('response_complete', (data) => {
+                this.handleResponseComplete(data);
+            });
+
+            this.wsManager.on('response_error', (data) => {
+                this.handleResponseError(data);
+            });
+
+            this.wsManager.on('generation_stopped', (data) => {
+                this.handleGenerationStopped(data);
+            });
+
+            // Fallback for non-streaming responses
             this.wsManager.on('chat_response', (data) => {
                 this.handleChatResponse(data);
             });
@@ -437,17 +501,26 @@ class ChatApp {
      * Stop generation
      */
     stopGeneration() {
+        if (!this.isGenerating) return;
+        
         this.isGenerating = false;
         this.currentRequestId = null;
         this.updateSendButton();
-        this.messagesManager.hideTypingIndicator();
+        this.messagesManager.hideThinkingIndicator();
         
-        // Send stop signal if connected
-        if (this.wsManager && this.isConnected) {
+        // Send stop signal if connected (with debouncing)
+        if (this.wsManager && this.isConnected && !this.stopSignalSent) {
+            this.stopSignalSent = true;
             this.wsManager.send({
                 type: 'stop_generation',
-                requestId: this.currentRequestId
+                requestId: this.currentRequestId,
+                timestamp: Date.now()
             });
+            
+            // Reset flag after a short delay
+            setTimeout(() => {
+                this.stopSignalSent = false;
+            }, 1000);
         }
     }
 
@@ -806,6 +879,253 @@ class ChatApp {
      */
     generateRequestId() {
         return 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    }
+
+    /**
+     * Handle thinking status indicator
+     */
+    handleThinkingStatus(data) {
+        this.messagesManager.showThinkingIndicator(data.status);
+    }
+
+    /**
+     * Handle response start
+     */
+    handleResponseStart(data) {
+        this.currentStreamingMessage = this.messagesManager.startStreamingMessage();
+        this.currentStreamingArtifacts = new Map();
+    }
+
+    /**
+     * Handle content chunk streaming
+     */
+    handleContentChunk(data) {
+        // Initialize streaming message if not already started
+        if (!this.currentStreamingMessage) {
+            this.currentStreamingMessage = this.messagesManager.startStreamingMessage();
+            this.currentStreamingArtifacts = new Map();
+        }
+        
+        this.messagesManager.appendToStreamingMessage(
+            this.currentStreamingMessage, 
+            data.content, 
+            data.is_final
+        );
+    }
+
+    /**
+     * Handle artifact start
+     */
+    handleArtifactStart(data) {
+        const artifact = data.artifact;
+        
+        // Create artifact in the artifacts manager
+        const createdArtifact = this.artifactsManager.createArtifact({
+            id: artifact.id,
+            type: artifact.type,
+            title: artifact.title,
+            content: "", // Will be streamed
+        });
+        
+        // Store for streaming updates
+        this.currentStreamingArtifacts.set(artifact.id, {
+            artifact: createdArtifact,
+            content: ""
+        });
+        
+        // Add artifact button to current message
+        if (this.currentStreamingMessage) {
+            this.messagesManager.addArtifactToStreamingMessage(
+                this.currentStreamingMessage,
+                createdArtifact
+            );
+        }
+        
+        // Auto-show artifact for real-time viewing
+        this.artifactsManager.showArtifact(artifact.id);
+    }
+
+    /**
+     * Handle artifact chunk streaming
+     */
+    handleArtifactChunk(data) {
+        const streamingArtifact = this.currentStreamingArtifacts.get(data.artifact_id);
+        
+        if (streamingArtifact) {
+            // Append content
+            streamingArtifact.content += data.content;
+            
+            // Update the artifact
+            streamingArtifact.artifact.content = streamingArtifact.content;
+            
+            // Re-render the artifact in real-time
+            this.artifactsManager.updateStreamingArtifact(data.artifact_id, streamingArtifact.content);
+        }
+    }
+
+    /**
+     * Handle response complete
+     */
+    handleResponseComplete(data) {
+        // Finalize streaming message
+        if (this.currentStreamingMessage) {
+            this.messagesManager.finalizeStreamingMessage(this.currentStreamingMessage, data);
+        }
+        
+        // Stop generation state
+        this.stopGeneration();
+        
+        // Hide thinking indicator
+        this.messagesManager.hideThinkingIndicator();
+        
+        // Clear streaming state
+        this.currentStreamingMessage = null;
+        this.currentStreamingArtifacts = null;
+        
+        console.log('Streaming response completed:', data);
+    }
+
+    /**
+     * Handle response error
+     */
+    handleResponseError(data) {
+        // Stop generation state
+        this.stopGeneration();
+        
+        // Hide thinking indicator
+        this.messagesManager.hideThinkingIndicator();
+        
+        // Show error message
+        this.messagesManager.addAIMessage(data.content, []);
+        
+        // Clear streaming state
+        this.currentStreamingMessage = null;
+        this.currentStreamingArtifacts = null;
+        
+        console.error('Streaming response error:', data);
+    }
+
+    /**
+     * Handle generation stopped
+     */
+    handleGenerationStopped(data) {
+        this.stopGeneration();
+        this.messagesManager.hideThinkingIndicator();
+        
+        // Clear streaming state
+        this.currentStreamingMessage = null;
+        this.currentStreamingArtifacts = null;
+        
+        console.log('Generation stopped by user');
+    }
+
+    /**
+     * Handle agent thinking status
+     */
+    handleAgentThinking(data) {
+        const { agent, status } = data;
+        console.log(`Agent ${agent} thinking:`, status);
+        
+        // Show thinking indicator with agent info
+        this.messagesManager.showAgentThinking(agent, status);
+    }
+
+    /**
+     * Handle agent content chunk
+     */
+    handleAgentContentChunk(data) {
+        const { agent, content, is_final } = data;
+        console.log(`Agent ${agent} content chunk:`, content);
+        
+        // Start streaming message if not already started
+        if (!this.currentStreamingMessage) {
+            this.currentStreamingMessage = this.messagesManager.startStreamingMessage();
+        }
+        
+        // Add agent content
+        this.messagesManager.appendAgentContent(
+            this.currentStreamingMessage,
+            agent,
+            content,
+            is_final
+        );
+    }
+
+    /**
+     * Handle agent artifact start
+     */
+    handleAgentArtifactStart(data) {
+        const { agent, artifact } = data;
+        console.log(`Agent ${agent} starting artifact:`, artifact);
+        
+        // Create artifact with agent info
+        const createdArtifact = this.artifactsManager.createArtifact({
+            id: artifact.id,
+            type: artifact.type,
+            title: artifact.title,
+            content: "",
+            agent: agent
+        });
+        
+        // Store for streaming updates
+        if (!this.currentStreamingArtifacts) {
+            this.currentStreamingArtifacts = new Map();
+        }
+        this.currentStreamingArtifacts.set(artifact.id, {
+            artifact: createdArtifact,
+            content: "",
+            agent: agent
+        });
+        
+        // Add artifact to current message
+        if (this.currentStreamingMessage) {
+            this.messagesManager.addAgentArtifact(
+                this.currentStreamingMessage,
+                agent,
+                createdArtifact
+            );
+        }
+        
+        // Auto-show artifact for real-time viewing
+        this.artifactsManager.showArtifact(artifact.id);
+    }
+
+    /**
+     * Handle agent artifact chunk
+     */
+    handleAgentArtifactChunk(data) {
+        const { agent, artifact_id, content, is_final } = data;
+        console.log(`Agent ${agent} artifact chunk for ${artifact_id}`);
+        
+        const streamingArtifact = this.currentStreamingArtifacts?.get(artifact_id);
+        
+        if (streamingArtifact) {
+            // Append content
+            streamingArtifact.content += content;
+            
+            // Update the artifact
+            streamingArtifact.artifact.content = streamingArtifact.content;
+            
+            // Re-render the artifact in real-time
+            this.artifactsManager.updateStreamingArtifact(artifact_id, streamingArtifact.content);
+            
+            // Update in message view
+            this.messagesManager.updateAgentArtifact(artifact_id, streamingArtifact.content, is_final);
+        }
+    }
+
+    /**
+     * Handle agent error
+     */
+    handleAgentError(data) {
+        const { agent, error } = data;
+        console.error(`Agent ${agent} error:`, error);
+        
+        // Show error in the UI
+        this.messagesManager.showAgentError(agent, error);
+        
+        // Show notification
+        this.showNotification(`${agent} Agent Error: ${error}`, 'error');
     }
 }
 

@@ -100,55 +100,72 @@ Focus on creating valuable, well-structured content that serves the user's speci
         keywords = self.extract_keywords(user_input)
         user_lower = user_input.lower()
         
-        # Specific document creation indicators
-        document_indicators = [
-            "write", "create", "document", "report", "guide",
-            "manual", "documentation", "article", "blog", "proposal",
-            "plan", "summary", "outline", "content", "copy", "draft"
+        # Very specific document creation indicators (explicit document requests)
+        explicit_document_requests = [
+            "write a document", "create a document", "draft a document",
+            "generate a document", "write a report", "create a report",
+            "write a guide", "create a guide", "write documentation",
+            "create documentation", "write an article", "create an article",
+            "write a proposal", "create a proposal", "write a manual",
+            "create a manual", "draft a report", "generate a report"
         ]
         
-        # Strong indicators that this is a document request
-        strong_indicators = [
-            "write a", "create a", "generate a", "draft a",
-            "document", "report", "guide", "manual", "proposal",
-            "article", "blog post", "documentation"
-        ]
+        # Check for explicit document requests first
+        for request in explicit_document_requests:
+            if request in user_lower:
+                return True
         
-        # Check for strong indicators first
-        for indicator in strong_indicators:
+        # Strong single-word indicators that suggest formal document creation
+        strong_single_indicators = ["documentation", "proposal", "manual"]
+        for indicator in strong_single_indicators:
             if indicator in user_lower:
                 return True
         
-        # Check for document indicators with context
-        for indicator in document_indicators:
-            if indicator in user_lower:
-                # Only return True if it seems like a document creation request
-                if any(context in user_lower for context in ["for", "about", "on", "regarding", "help me"]):
-                    return True
-        
-        # Check if there are multiple relevant keywords (suggests document creation)
-        all_capability_keywords = []
-        for capability in self.capabilities:
-            all_capability_keywords.extend([kw.lower() for kw in capability.keywords])
-        
-        relevant_keywords = [kw for kw in keywords if kw.lower() in all_capability_keywords]
-        if len(relevant_keywords) >= 2:
-            return True
-        
-        # Don't handle simple conversational inputs
-        conversational_patterns = [
-            "hi", "hello", "hey", "how are you", "what's up", "thanks", "thank you",
-            "cool", "nice", "good", "great", "awesome", "ok", "okay", "yes", "no"
+        # More restrictive check for ambiguous words
+        ambiguous_indicators = ["write", "create", "generate", "draft"]
+        document_context_words = [
+            "document", "report", "guide", "article", "blog post", 
+            "documentation", "manual", "proposal", "plan", "summary"
         ]
         
-        if len(user_input.split()) <= 5:  # Short messages
-            for pattern in conversational_patterns:
-                if pattern in user_lower:
-                    return False
+        # Only trigger if we have both an action word AND a clear document type
+        has_action = any(action in user_lower for action in ambiguous_indicators)
+        has_document_type = any(doc_type in user_lower for doc_type in document_context_words)
+        
+        if has_action and has_document_type:
+            # Additional check: avoid triggering for simple examples or explanations
+            simple_request_patterns = [
+                "example of", "show me", "what is", "how to", "can you",
+                "please", "just", "simple", "basic", "quick"
+            ]
+            
+            # If it looks like asking for a simple example rather than document creation
+            is_simple_request = any(pattern in user_lower for pattern in simple_request_patterns)
+            
+            if is_simple_request:
+                # Only create document if it's very explicitly requested
+                explicit_phrases = [
+                    "write a complete", "create a full", "generate a detailed",
+                    "draft a formal", "create a comprehensive"
+                ]
+                return any(phrase in user_lower for phrase in explicit_phrases)
+            
+            return True
+        
+        # Don't handle conversational or example requests
+        conversational_patterns = [
+            "hi", "hello", "hey", "how are you", "what's up", "thanks", "thank you",
+            "cool", "nice", "good", "great", "awesome", "ok", "okay", "yes", "no",
+            "example", "show me", "tell me", "explain", "what is", "how does"
+        ]
+        
+        for pattern in conversational_patterns:
+            if pattern in user_lower:
+                return False
         
         return False
     
-    async def process_request(self, user_input: str, context: Dict[str, Any] = None) -> AgentResponse:
+    async def process_request(self, user_input: str, context: Dict[str, Any] = None, config: Dict[str, Any] = None) -> AgentResponse:
         """Process document generation request."""
         try:
             logger.info(f"Document Agent processing request: {user_input[:100]}...")
@@ -156,10 +173,11 @@ Focus on creating valuable, well-structured content that serves the user's speci
             # Detect document type
             doc_type = self._detect_document_type(user_input)
             
-            # Generate document response
+            # Generate document response with streaming support
             response_content = await self.generate_response(
                 user_input,
-                self._get_specialized_prompt(doc_type)
+                self._get_specialized_prompt(doc_type),
+                config=config
             )
             
             # Create document artifact

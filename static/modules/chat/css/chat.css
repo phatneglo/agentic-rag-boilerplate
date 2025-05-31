@@ -295,61 +295,249 @@ body {
 
 /* Artifact Buttons */
 .artifact-button {
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    background-color: #f8fafc;
-    border: 1px solid #e2e8f0;
+    display: block;
+    width: 100%;
+    margin: 8px 0;
+    padding: 0;
+    border: 1px solid #e3e8ef;
     border-radius: 8px;
-    padding: 0.75rem 1rem;
-    margin: 0.25rem 0;
-    color: var(--text-color);
-    text-decoration: none;
+    background: linear-gradient(145deg, #ffffff, #f8f9fa);
     cursor: pointer;
     transition: all 0.2s ease;
-    font-size: 0.875rem;
-    font-weight: 500;
+    text-decoration: none;
+    color: inherit;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
 }
 
 .artifact-button:hover {
-    background-color: var(--light-color);
-    border-color: var(--primary-color);
-    text-decoration: none;
-    color: var(--primary-color);
+    border-color: #007bff;
+    box-shadow: 0 2px 8px rgba(0,123,255,0.15);
     transform: translateY(-1px);
-    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 
-.artifact-button-enhanced {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    border: none;
+.artifact-button-content {
+    display: flex;
+    align-items: center;
+    padding: 12px 16px;
+    gap: 12px;
+}
+
+.artifact-icon {
+    flex-shrink: 0;
+    width: 40px;
+    height: 40px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: linear-gradient(145deg, #007bff, #0056b3);
+    border-radius: 8px;
     color: white;
+    font-size: 16px;
+}
+
+.artifact-info {
+    flex: 1;
+    min-width: 0;
+}
+
+.artifact-title {
     font-weight: 600;
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    font-size: 14px;
+    color: #1a1a1a;
+    margin-bottom: 2px;
+    line-height: 1.3;
 }
 
-.artifact-button-enhanced:hover {
-    background: linear-gradient(135deg, #5a6fd8 0%, #6a4190 100%);
-    color: white;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+.artifact-type {
+    font-size: 12px;
+    color: #6b7280;
+    font-weight: 500;
 }
 
+.artifact-actions {
+    flex-shrink: 0;
+}
+
+.artifact-actions .btn {
+    padding: 6px 12px;
+    font-size: 12px;
+    font-weight: 500;
+}
+
+/* Dark mode artifact buttons */
+.dark-mode .artifact-button {
+    background: linear-gradient(145deg, #2d3748, #1a202c);
+    border-color: #4a5568;
+    color: #e2e8f0;
+}
+
+.dark-mode .artifact-button:hover {
+    border-color: #63b3ed;
+    box-shadow: 0 2px 8px rgba(99,179,237,0.15);
+}
+
+.dark-mode .artifact-title {
+    color: #e2e8f0;
+}
+
+.dark-mode .artifact-type {
+    color: #a0aec0;
+}
+
+/* Enhanced artifact marker styling */
 .artifact-marker {
-    display: inline-block;
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-    color: white;
-    padding: 0.4rem 0.8rem;
-    border-radius: 6px;
-    font-size: 0.85rem;
-    margin: 0.25rem 0;
+    display: inline-flex;
+    align-items: center;
+    padding: 8px 16px;
+    margin: 8px 4px;
+    background: linear-gradient(145deg, #e3f2fd, #bbdefb);
+    border: 1px solid #2196f3;
+    border-radius: 8px;
     cursor: pointer;
-    transition: all 0.2s ease;
+    transition: all 0.3s ease;
+    font-size: 13px;
+    font-weight: 500;
+    color: #1976d2;
+    text-decoration: none;
+    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.1);
 }
 
 .artifact-marker:hover {
+    background: linear-gradient(145deg, #bbdefb, #90caf9);
+    border-color: #1976d2;
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+    box-shadow: 0 4px 8px rgba(33, 150, 243, 0.2);
+    color: #0d47a1;
+}
+
+.artifact-marker i {
+    color: #1976d2;
+    margin-right: 6px;
+}
+
+.artifact-marker strong {
+    color: #0d47a1;
+}
+
+.artifact-marker .text-muted {
+    color: #1565c0 !important;
+    opacity: 0.8;
+}
+
+/* Enhanced artifact buttons */
+.artifact-button-enhanced {
+    margin: 12px 0 !important;
+    border: 2px solid #e3f2fd !important;
+    border-radius: 12px !important;
+    background: linear-gradient(145deg, #ffffff, #f8f9fa) !important;
+    box-shadow: 0 3px 6px rgba(0,0,0,0.1) !important;
+    transition: all 0.3s ease !important;
+    cursor: pointer !important;
+    pointer-events: auto !important;
+}
+
+.artifact-button-enhanced:hover {
+    border-color: #2196f3 !important;
+    box-shadow: 0 6px 12px rgba(33, 150, 243, 0.15) !important;
+    transform: translateY(-2px) !important;
+}
+
+.artifact-button-enhanced .artifact-icon {
+    background: linear-gradient(145deg, #2196f3, #1976d2) !important;
+    box-shadow: 0 2px 4px rgba(33, 150, 243, 0.3) !important;
+}
+
+.artifact-button-enhanced .artifact-title {
+    color: #1976d2 !important;
+    font-weight: 600 !important;
+}
+
+.artifact-button-enhanced .artifact-type {
+    color: #1565c0 !important;
+}
+
+/* Ensure all artifact buttons are clickable */
+.artifact-button,
+.artifact-button *,
+.view-artifact {
+    pointer-events: auto !important;
+    cursor: pointer !important;
+}
+
+.artifact-button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+}
+
+/* Fix any z-index issues */
+.artifact-button {
+    position: relative;
+    z-index: 1;
+}
+
+/* Ensure Bootstrap table styling for rendered tables */
+.table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 1rem;
+    background-color: transparent;
+}
+
+.table th,
+.table td {
+    padding: 0.75rem;
+    vertical-align: top;
+    border-top: 1px solid #dee2e6;
+    border-bottom: 1px solid #dee2e6;
+    border-left: 1px solid #dee2e6;
+    border-right: 1px solid #dee2e6;
+}
+
+.table thead th {
+    vertical-align: bottom;
+    border-bottom: 2px solid #dee2e6;
+    background-color: #f8f9fa;
+    font-weight: 600;
+}
+
+.table-bordered {
+    border: 1px solid #dee2e6;
+}
+
+.table-striped tbody tr:nth-of-type(odd) {
+    background-color: rgba(0, 0, 0, 0.05);
+}
+
+.table-light {
+    background-color: #f8f9fa;
+    color: #212529;
+}
+
+/* Responsive artifact buttons */
+@media (max-width: 768px) {
+    .artifact-button-content {
+        padding: 10px 12px;
+        gap: 10px;
+    }
+    
+    .artifact-icon {
+        width: 36px;
+        height: 36px;
+        font-size: 14px;
+    }
+    
+    .artifact-title {
+        font-size: 13px;
+    }
+    
+    .artifact-type {
+        font-size: 11px;
+    }
+    
+    .artifact-actions .btn {
+        padding: 4px 8px;
+        font-size: 11px;
+    }
 }
 
 /* Typing Indicator */
@@ -598,11 +786,19 @@ body {
 
 .artifact-header {
     display: flex;
-    justify-content: between;
+    justify-content: space-between;
     align-items: center;
     padding: 0.75rem 1rem;
     background-color: var(--light-color);
     border-bottom: 1px solid var(--artifact-border);
+    min-height: 60px;
+}
+
+.artifact-title-section {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    flex: 1;
 }
 
 .artifact-title {
@@ -614,24 +810,31 @@ body {
 
 .artifact-actions {
     display: flex;
-    gap: 0.5rem;
+    gap: 0.25rem;
+    flex-shrink: 0;
 }
 
 .artifact-action-btn {
     background: none;
     border: 1px solid var(--border-color);
     color: var(--text-muted);
-    padding: 0.25rem 0.5rem;
+    padding: 0.375rem 0.5rem;
     border-radius: 4px;
     cursor: pointer;
     font-size: 0.75rem;
     transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 32px;
+    height: 32px;
 }
 
 .artifact-action-btn:hover {
     background-color: var(--chat-bg);
     color: var(--primary-color);
     border-color: var(--primary-color);
+    transform: translateY(-1px);
 }
 
 .artifact-content {
@@ -714,6 +917,31 @@ body {
     .btn-send {
         order: 2;
         align-self: flex-end;
+    }
+    
+    .artifact-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 0.75rem;
+        padding: 0.75rem;
+    }
+    
+    .artifact-title-section {
+        flex-direction: row;
+        justify-content: space-between;
+        align-items: center;
+    }
+    
+    .artifact-view-toggle {
+        font-size: 0.7rem;
+    }
+    
+    .toggle-btn {
+        padding: 0.25rem 0.5rem;
+    }
+    
+    .artifact-actions {
+        justify-content: center;
     }
 }
 
@@ -955,4 +1183,127 @@ body {
 
 .alert summary:hover {
     text-decoration: underline;
+}
+
+/* Streaming Message Styles */
+.message.streaming .message-bubble {
+    position: relative;
+}
+
+.message.streaming .message-bubble::after {
+    content: '▊';
+    color: var(--primary-color, #007bff);
+    animation: blink 1.2s infinite;
+    font-weight: bold;
+    margin-left: 2px;
+}
+
+@keyframes blink {
+    0%, 50% { opacity: 1; }
+    51%, 100% { opacity: 0; }
+}
+
+/* Agent sections streaming */
+.agent-section {
+    transition: all 0.2s ease-in-out;
+    border-left: 3px solid transparent;
+    padding-left: 12px;
+    margin: 8px 0;
+}
+
+.agent-section:not(.completed) {
+    border-left-color: var(--primary-color, #007bff);
+}
+
+.agent-section.completed {
+    border-left-color: #28a745;
+}
+
+.agent-content {
+    /* Enable smooth text updates */
+    text-rendering: optimizeSpeed;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+}
+
+/* Optimize for streaming performance */
+.message-bubble {
+    contain: layout style;
+    will-change: contents;
+}
+
+.agent-content {
+    contain: layout style;
+    will-change: contents;
+}
+
+/* Reduce reflow during streaming */
+.message-bubble, .agent-content {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+}
+
+/* Preview Toggle Styles */
+.artifact-view-toggle {
+    display: flex;
+    background-color: var(--chat-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 6px;
+    overflow: hidden;
+    width: fit-content;
+}
+
+.toggle-btn {
+    background: none;
+    border: none;
+    padding: 0.375rem 0.75rem;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    border-radius: 0;
+}
+
+.toggle-btn:hover {
+    background-color: var(--light-color);
+}
+
+.toggle-btn.active {
+    background-color: var(--primary-color);
+    color: white;
+}
+
+.toggle-btn i {
+    font-size: 0.7rem;
+}
+
+/* Enhanced Thinking Indicator */
+.thinking-indicator {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 1rem;
+    color: var(--primary-color);
+    font-style: italic;
+    border-left: 3px solid var(--primary-color);
+    background-color: rgba(59, 130, 246, 0.05);
+    margin: 0.5rem 0;
+    border-radius: 0 8px 8px 0;
+}
+
+.thinking-indicator .typing-text {
+    font-weight: 500;
+}
+
+/* Artifact Content View States */
+.artifact-content[data-view="preview"] .code-view {
+    display: none;
+}
+
+.artifact-content[data-view="code"] .preview-view {
+    display: none;
 } 

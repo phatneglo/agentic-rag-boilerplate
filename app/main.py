@@ -47,6 +47,13 @@ async def lifespan(app: FastAPI):
         logger.error("Failed to initialize Redis connection", error=str(e))
         # Don't fail startup, let the app handle connection errors gracefully
     
+    # Initialize WebSocket manager
+    try:
+        from app.api.routes.websocket_handler import chat_websocket_manager
+        logger.info("WebSocket manager initialized successfully")
+    except Exception as e:
+        logger.error("Failed to initialize WebSocket manager", error=str(e))
+    
     # Store startup time
     app.state.startup_time = time.time()
     
@@ -63,6 +70,20 @@ async def lifespan(app: FastAPI):
         logger.info("Redis connection closed successfully")
     except Exception as e:
         logger.error("Error closing Redis connection", error=str(e))
+    
+    # Clean up WebSocket connections
+    try:
+        from app.api.routes.websocket_handler import chat_websocket_manager
+        # Close any remaining connections
+        for connection in chat_websocket_manager.active_connections.copy():
+            try:
+                await connection.close()
+            except:
+                pass
+        chat_websocket_manager.active_connections.clear()
+        logger.info("WebSocket connections cleaned up")
+    except Exception as e:
+        logger.error("Error cleaning up WebSocket connections", error=str(e))
     
     logger.info("Document Processing API shutdown complete")
 
@@ -358,42 +379,13 @@ app.include_router(
     tags=["chat"]
 )
 
-# Include WebSocket directly since it needs to be at root level
-from app.api.routes.chat_routes import manager
+# Include WebSocket handler
+from app.api.routes.websocket_handler import websocket_endpoint
 
 @app.websocket("/ws/chat")
-async def websocket_endpoint(websocket: WebSocket):
-    """WebSocket endpoint for chat"""
-    await manager.connect(websocket)
-    try:
-        while True:
-            data = await websocket.receive_text()
-            # Handle WebSocket data - delegated to chat routes
-            import json
-            import asyncio
-            from app.api.routes.chat_routes import generate_ai_response
-            
-            try:
-                message_data = json.loads(data)
-                logger.info("Received WebSocket message", message_type=message_data.get("type"))
-                
-                if message_data.get("type") == "chat_message":
-                    # Process chat message and generate AI response
-                    response = await generate_ai_response(message_data.get("content", ""))
-                    await manager.send_personal_message(json.dumps(response), websocket)
-                elif message_data.get("type") == "ping":
-                    # Respond to ping with pong
-                    import time
-                    pong_response = {"type": "pong", "timestamp": time.time()}
-                    await manager.send_personal_message(json.dumps(pong_response), websocket)
-                    
-            except json.JSONDecodeError:
-                logger.error("Invalid JSON received from WebSocket")
-            except Exception as e:
-                logger.error("Error processing WebSocket message", error=str(e))
-                
-    except Exception:  # WebSocketDisconnect
-        manager.disconnect(websocket)
+async def chat_websocket(websocket: WebSocket):
+    """WebSocket endpoint for chat with streaming support"""
+    await websocket_endpoint(websocket)
 
 # Mount static files for file manager UI
 app.mount("/static", StaticFiles(directory="static"), name="static")

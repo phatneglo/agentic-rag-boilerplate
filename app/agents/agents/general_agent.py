@@ -51,65 +51,46 @@ class GeneralAgent(BaseAgent):
         super().__init__("General", capabilities)
     
     def get_system_prompt(self) -> str:
-        return """You are a friendly AI assistant. You handle conversational interactions and general questions with warmth and helpfulness.
+        return """You are a helpful AI assistant. Your goal is to provide clear, useful, and friendly responses to any question or request.
 
-Your role is to:
-- Respond to greetings and social interactions naturally
-- Acknowledge user comments and compliments appropriately  
-- Provide brief, helpful responses to general questions
-- Guide users toward specific help when they need specialized assistance
+You can help with:
+- Answering questions and providing explanations
+- Creating examples and demonstrations
+- Providing information and guidance
+- General conversation and assistance
+- Lists, tables, and data in text format
+- Simple code examples in your response
+- Step-by-step instructions
+- Recommendations and advice
 
 Keep your responses:
-- Friendly and conversational
-- Brief and to the point
-- Helpful without being overwhelming
-- Encouraging and positive
+- Clear and well-organized
+- Helpful and informative
+- Conversational and friendly
+- Complete but not overwhelming
 
-For specific tasks like coding, analysis, diagrams, or document creation, you should suggest that the user ask more specifically about what they need help with.
+If someone asks for examples, code, lists, or explanations, provide them directly in your response. Format your answers nicely using markdown for better readability.
 
-Example responses:
-- For "Hi" → "Hello! I'm here to help you with coding, analysis, writing, diagrams, and more. What can I assist you with today?"
-- For "That's cool" → "I'm glad you think so! Is there anything specific I can help you with?"
-- For "How are you?" → "I'm doing great, thanks for asking! I'm ready to help with whatever you need. What would you like to work on?"
-"""
+For example:
+- If asked for a list of dog breeds, provide a nice formatted list
+- If asked for code examples, include them inline with proper formatting
+- If asked to explain something, give a clear explanation with examples
+- If asked for instructions, provide step-by-step guidance
+
+Always aim to be maximally helpful while keeping things simple and accessible."""
     
     def can_handle(self, user_input: str) -> bool:
-        """Check if this agent can handle the user request."""
-        user_lower = user_input.lower().strip()
-        
-        # Handle short conversational inputs
-        if len(user_input.split()) <= 5:
-            conversational_patterns = [
-                "hi", "hello", "hey", "thanks", "thank you", "thanks!",
-                "cool", "nice", "good", "great", "awesome", "ok", "okay",
-                "yes", "no", "wow", "amazing", "interesting", "how are you",
-                "what's up", "wassup", "sup", "morning", "afternoon", "evening"
-            ]
-            
-            for pattern in conversational_patterns:
-                if pattern in user_lower or user_lower == pattern:
-                    return True
-        
-        # Handle general help requests
-        help_patterns = [
-            "what can you do", "what are your capabilities", "help me",
-            "can you help", "what can you help with", "tell me about yourself",
-            "what are you", "who are you"
-        ]
-        
-        for pattern in help_patterns:
-            if pattern in user_lower:
-                return True
-        
-        return False
+        """Handle almost all requests - this is now the primary agent."""
+        # Handle everything except very specific technical requests
+        return True
     
-    async def process_request(self, user_input: str, context: Dict[str, Any] = None) -> AgentResponse:
+    async def process_request(self, user_input: str, context: Dict[str, Any] = None, config: Dict[str, Any] = None) -> AgentResponse:
         """Process general conversation request."""
         try:
             logger.info(f"General Agent processing request: {user_input[:100]}...")
             
-            # Generate conversational response
-            response_content = await self.generate_response(user_input)
+            # Generate conversational response with streaming support
+            response_content = await self.generate_response(user_input, config=config)
             
             # No artifacts for simple conversation
             artifacts = []

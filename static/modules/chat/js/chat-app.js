@@ -146,6 +146,7 @@ class ChatApp {
             this.messageInput.addEventListener('input', () => {
                 this.updateCharacterCount();
                 this.adjustTextareaHeight();
+                this.updateSendButton();
             });
         }
 

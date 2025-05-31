@@ -107,11 +107,30 @@ class BaseAgent(ABC):
             if config and config.get("callbacks"):
                 logger.info(f"🚀 {self.name}: Starting real-time streaming with callbacks")
                 
-                # Use astream for real-time token streaming
+                # Get the callback to check for cancellation
+                callbacks = config.get("callbacks", [])
+                callback = callbacks[0] if callbacks else None
+                
+                # Use astream for real-time token streaming with cancellation checks
                 full_response = ""
-                async for chunk in self.llm.astream(messages, config=config):
-                    if hasattr(chunk, 'content') and chunk.content:
-                        full_response += chunk.content
+                try:
+                    async for chunk in self.llm.astream(messages, config=config):
+                        # Check if user cancelled the generation
+                        if callback and hasattr(callback, 'is_cancelled') and callback.is_cancelled:
+                            logger.info(f"🛑 {self.name}: Generation cancelled by user")
+                            break
+                            
+                        # Check if asyncio task was cancelled
+                        if asyncio.current_task() and asyncio.current_task().cancelled():
+                            logger.info(f"🛑 {self.name}: Generation cancelled by task cancellation")
+                            break
+                            
+                        if hasattr(chunk, 'content') and chunk.content:
+                            full_response += chunk.content
+                            
+                except asyncio.CancelledError:
+                    logger.info(f"🛑 {self.name}: Generation cancelled via asyncio.CancelledError")
+                    raise
                 
                 logger.info(f"✅ {self.name}: Completed streaming - {len(full_response)} characters total")
                 return full_response
@@ -120,6 +139,9 @@ class BaseAgent(ABC):
                 response = await self.llm.ainvoke(messages)
                 return response.content
             
+        except asyncio.CancelledError:
+            # Re-raise cancellation to properly handle it
+            raise
         except Exception as e:
             logger.error(f"Error generating response in {self.name}: {e}")
             # Fallback to mock response on error

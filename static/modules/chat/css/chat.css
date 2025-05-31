@@ -730,25 +730,52 @@ body {
     min-width: 44px;
     min-height: 44px;
     flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
+    position: relative;
+    transform: scale(1);
 }
 
 .btn-send:hover:not(:disabled) {
     background-color: #2563eb;
     transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+}
+
+.btn-send:active:not(:disabled) {
+    transform: scale(0.95);
+    transition-duration: 0.1s;
 }
 
 .btn-send:disabled {
     background-color: var(--text-muted);
     cursor: not-allowed;
     transform: none;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 }
 
 .btn-send.btn-stop {
     background-color: #ef4444;
+    box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+    animation: pulse-stop 2s infinite;
 }
 
 .btn-send.btn-stop:hover {
     background-color: #dc2626;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.4);
+    transform: scale(1.05);
+}
+
+.btn-send.btn-stop i {
+    font-size: 0.9rem;
+}
+
+@keyframes pulse-stop {
+    0%, 100% {
+        box-shadow: 0 2px 8px rgba(239, 68, 68, 0.3);
+    }
+    50% {
+        box-shadow: 0 4px 12px rgba(239, 68, 68, 0.5);
+    }
 }
 
 /* Upload Modal */

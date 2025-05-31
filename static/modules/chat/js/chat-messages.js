@@ -946,7 +946,7 @@ class ChatMessages {
      * Hide thinking indicator
      */
     hideThinkingIndicator() {
-        const indicator = document.getElementById('streamingIndicator');
+        const indicator = document.getElementById('typingIndicator');
         if (indicator) {
             indicator.classList.add('d-none');
         }
@@ -956,7 +956,7 @@ class ChatMessages {
      * Show agent thinking indicator
      */
     showAgentThinking(agent, status) {
-        const indicator = document.getElementById('streamingIndicator');
+        const indicator = document.getElementById('typingIndicator');
         if (indicator) {
             indicator.classList.remove('d-none');
             

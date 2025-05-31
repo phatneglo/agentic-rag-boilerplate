@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat App Fixes Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-card {
+            background: white;
+            padding: 20px;
+            margin: 20px 0;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-title {
+            color: #333;
+            border-bottom: 2px solid #007bff;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+        }
+        .test-step {
+            background: #f8f9fa;
+            padding: 10px;
+            margin: 10px 0;
+            border-left: 4px solid #007bff;
+            border-radius: 4px;
+        }
+        .success {
+            border-left-color: #28a745;
+            background: #d4edda;
+        }
+        .warning {
+            border-left-color: #ffc107;
+            background: #fff3cd;
+        }
+        .danger {
+            border-left-color: #dc3545;
+            background: #f8d7da;
+        }
+        .chat-link {
+            display: inline-block;
+            background: #007bff;
+            color: white;
+            padding: 12px 24px;
+            text-decoration: none;
+            border-radius: 6px;
+            margin: 10px 0;
+            transition: background 0.2s;
+        }
+        .chat-link:hover {
+            background: #0056b3;
+            color: white;
+            text-decoration: none;
+        }
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 15px;
+            border-radius: 6px;
+            margin: 10px 0;
+            overflow-x: auto;
+        }
+        ul {
+            line-height: 1.6;
+        }
+        li {
+            margin: 8px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧪 Chat App Fixes Test Guide</h1>
+    <p>This page helps you manually test the two major fixes implemented for the chat application.</p>
+    
+    <div class="test-card">
+        <h2 class="test-title">🔧 Fixes Implemented</h2>
+        
+        <div class="test-step success">
+            <strong>Fix #1: Send Button Enablement</strong><br>
+            Added <code>this.updateSendButton();</code> to the input event listener in chat-app.js line 147.
+            Now the send button should become enabled when you type content.
+        </div>
+        
+        <div class="test-step success">
+            <strong>Fix #2: Stop Button Functionality</strong><br>
+            Enhanced cancellation checks in multiple places:
+            <ul>
+                <li>WebSocket handler: Better callback cancellation</li>
+                <li>Agent orchestrator: Task cancellation support</li>
+                <li>Base agent: LLM streaming interruption during generation</li>
+                <li>Stream content: Real-time cancellation checks</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="test-card">
+        <h2 class="test-title">🧪 Manual Test Instructions</h2>
+        
+        <a href="http://localhost:8000" target="_blank" class="chat-link">
+            Open Chat Application →
+        </a>
+        
+        <h3>Test 1: Send Button Enablement</h3>
+        <div class="test-step">
+            <strong>Steps:</strong>
+            <ol>
+                <li>Open the chat application</li>
+                <li>Look at the send button (should be <span style="color: #6c757d;">disabled/gray</span>)</li>
+                <li>Start typing in the input field</li>
+                <li>Send button should turn <span style="color: #007bff;">blue and become clickable</span></li>
+                <li>Clear the input field</li>
+                <li>Send button should turn <span style="color: #6c757d;">gray and become disabled</span> again</li>
+            </ol>
+        </div>
+        
+        <h3>Test 2: Stop Button Functionality</h3>
+        <div class="test-step">
+            <strong>Steps:</strong>
+            <ol>
+                <li>Type a request for a long response like: <br>
+                    <code style="background: #f1f3f4; padding: 4px;">"Please write a very detailed explanation of machine learning with many examples"</code></li>
+                <li>Click Send</li>
+                <li>Watch the send button turn into a <span style="color: #dc3545;">red pulsing stop button</span></li>
+                <li>Wait for the AI to start streaming response (you'll see tokens appearing)</li>
+                <li><strong>IMPORTANT:</strong> Click the stop button after you see several words being generated</li>
+                <li>The response should stop streaming immediately</li>
+                <li>The stop button should return to normal blue send button</li>
+                <li>You should see "Generation stopped" or similar message</li>
+            </ol>
+        </div>
+        
+        <h3>Expected Results</h3>
+        <div class="test-step success">
+            <strong>✅ Send Button Working:</strong> Button enables/disables based on input content
+        </div>
+        <div class="test-step success">
+            <strong>✅ Stop Button Working:</strong> Clicking stop immediately halts AI generation
+        </div>
+        
+        <h3>If Tests Fail</h3>
+        <div class="test-step warning">
+            <strong>Send Button Still Disabled:</strong>
+            <ul>
+                <li>Check browser console for JavaScript errors</li>
+                <li>Verify the chat-app.js file was updated correctly</li>
+                <li>Try refreshing the page (Ctrl+F5)</li>
+            </ul>
+        </div>
+        
+        <div class="test-step warning">
+            <strong>Stop Button Not Working:</strong>
+            <ul>
+                <li>Check server logs for cancellation messages</li>
+                <li>Try with a different request type</li>
+                <li>Check if WebSocket connection is stable</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="test-card">
+        <h2 class="test-title">🔍 Technical Details</h2>
+        
+        <h3>Files Modified</h3>
+        <div class="code-block">
+static/modules/chat/js/chat-app.js (line 147)
+app/api/routes/websocket_handler.py (multiple methods)
+app/agents/base_agent.py (generate_response method)
+        </div>
+        
+        <h3>Key Changes</h3>
+        <ul>
+            <li><strong>Input Event Listener:</strong> Now calls updateSendButton() when user types</li>
+            <li><strong>Cancellation Checks:</strong> Added checks in streaming loops</li>
+            <li><strong>Task Management:</strong> Better cleanup of active tasks and callbacks</li>
+            <li><strong>LLM Interruption:</strong> Streaming loop now checks for cancellation on each token</li>
+        </ul>
+    </div>
+    
+    <div class="test-card">
+        <h2 class="test-title">📊 Test Results</h2>
+        <p>Record your test results here:</p>
+        
+        <div class="test-step">
+            <label>
+                <input type="checkbox"> Send button enables when typing
+            </label>
+        </div>
+        
+        <div class="test-step">
+            <label>
+                <input type="checkbox"> Send button disables when input is empty
+            </label>
+        </div>
+        
+        <div class="test-step">
+            <label>
+                <input type="checkbox"> Stop button appears during generation
+            </label>
+        </div>
+        
+        <div class="test-step">
+            <label>
+                <input type="checkbox"> Stop button actually stops AI generation
+            </label>
+        </div>
+        
+        <div class="test-step">
+            <label>
+                <input type="checkbox"> UI returns to normal state after stopping
+            </label>
+        </div>
+    </div>
+    
+    <script>
+        // Auto-check server status
+        fetch('http://localhost:8000/health')
+            .then(response => response.json())
+            .then(data => {
+                const statusEl = document.createElement('div');
+                statusEl.className = 'test-step success';
+                statusEl.innerHTML = '<strong>✅ Server Status:</strong> Running and healthy';
+                document.querySelector('.test-card').appendChild(statusEl);
+            })
+            .catch(error => {
+                const statusEl = document.createElement('div');
+                statusEl.className = 'test-step danger';
+                statusEl.innerHTML = '<strong>❌ Server Status:</strong> Not running or unhealthy';
+                document.querySelector('.test-card').appendChild(statusEl);
+            });
+    </script>
+</body>
+</html> 

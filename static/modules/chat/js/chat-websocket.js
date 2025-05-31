@@ -315,6 +315,9 @@ For more information, check the [documentation](https://example.com).`
                 case 'agent_error':
                     this.emit('agent_error', message);
                     break;
+                case 'generation_stopped':
+                    this.emit('generation_stopped', message);
+                    break;
                     
                 // System messages
                 case 'error':

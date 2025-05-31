@@ -11,6 +11,7 @@ from fastapi.security import HTTPBearer
 import tempfile
 import os
 from pathlib import Path
+import io
 
 from app.services.file_manager_service import file_manager_service
 from app.core.logging_config import get_logger
@@ -202,8 +203,15 @@ async def download_file(path: str = Query(..., description="File path to downloa
 async def download_folder(path: str = Query(..., description="Folder path to download as zip")):
     """Download a folder as a zip archive."""
     try:
-        # For now, return an error as folder download is not implemented for object storage
-        raise HTTPException(status_code=501, detail="Folder download not yet implemented for object storage")
+        # Create zip file for the folder
+        zip_buffer, zip_filename = await file_manager_service.create_folder_zip(path)
+        
+        # Return the zip file as a streaming response
+        return StreamingResponse(
+            io.BytesIO(zip_buffer.getvalue()),
+            media_type="application/zip",
+            headers={"Content-Disposition": f"attachment; filename={zip_filename}"}
+        )
         
     except HTTPException:
         raise

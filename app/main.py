@@ -15,7 +15,6 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.core.logging_config import configure_logging, get_logger, log_request_response
 from app.api.routes.document_routes import router as document_router
-from app.api.routes.file_routes import upload_router, manager_router
 from app.api.routes.file_manager import router as file_manager_router
 from app.utils.queue_manager import queue_manager
 from app.models.responses.document_responses import HealthCheckResponse, ErrorResponse
@@ -299,15 +298,16 @@ app.include_router(
     tags=["documents"]
 )
 
-app.include_router(
-    upload_router,
-    prefix=f"/api/{settings.api_version}"
-)
+# Note: Removed upload_router and manager_router to avoid conflicts with file_manager_router
+# app.include_router(
+#     upload_router,
+#     prefix=f"/api/{settings.api_version}"
+# )
 
-app.include_router(
-    manager_router,
-    prefix=f"/api/{settings.api_version}"
-)
+# app.include_router(
+#     manager_router,
+#     prefix=f"/api/{settings.api_version}"
+# )
 
 app.include_router(
     file_manager_router,
@@ -355,8 +355,6 @@ async def root() -> Dict[str, Any]:
             "index_typesense": f"/api/{settings.api_version}/documents/index/typesense",
             "index_qdrant": f"/api/{settings.api_version}/documents/index/qdrant",
             "sync_document": f"/api/{settings.api_version}/documents/sync",
-            "upload_files": f"/api/{settings.api_version}/files/upload",
-            "get_signed_url": f"/api/{settings.api_version}/files/get-signed-url",
             "file_manager": {
                 "ui": "/file-manager",
                 "api": f"/api/{settings.api_version}/file-manager",

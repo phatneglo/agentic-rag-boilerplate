@@ -259,19 +259,31 @@ class FileManagerService:
             raise HTTPException(status_code=500, detail="Failed to move item")
     
     async def download_file(self, path: str) -> Tuple[str, str]:
-        """Get download URL for file."""
+        """Get download URL for a file."""
         try:
-            # Generate presigned URL for download
             download_url = await self.storage.get_download_url(path)
-            mime_type = mimetypes.guess_type(path)[0] or 'application/octet-stream'
+            
+            # Get file info to determine MIME type
+            file_info = await self.storage.get_object_info(path)
+            mime_type = file_info.get('mime_type', 'application/octet-stream')
             
             return download_url, mime_type
             
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error preparing download for {path}: {e}")
-            raise HTTPException(status_code=500, detail="Failed to prepare download")
+            logger.error(f"Error getting download URL for {path}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to get download URL")
+    
+    async def create_folder_zip(self, path: str) -> Tuple:
+        """Create a zip file containing all files in a folder."""
+        try:
+            return await self.storage.create_folder_zip(path)
+        except HTTPException:
+            raise
+        except Exception as e:
+            logger.error(f"Error creating zip for folder {path}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to create folder zip")
     
     async def download_folder(self, path: str) -> Tuple[Path, str]:
         """Create zip archive of folder for download."""

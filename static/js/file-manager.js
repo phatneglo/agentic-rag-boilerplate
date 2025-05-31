@@ -79,6 +79,10 @@ class FileManager {
         document.getElementById('renameForm').addEventListener('submit', this.renameItem.bind(this));
         document.getElementById('moveForm').addEventListener('submit', this.moveItem.bind(this));
         
+        // Delete confirmation modal
+        document.getElementById('confirmDeleteBtn').addEventListener('click', this.executeDelete.bind(this));
+        document.getElementById('confirmFolderName').addEventListener('input', this.validateFolderName.bind(this));
+        
         // Upload functionality
         document.getElementById('browseBtn').addEventListener('click', () => {
             document.getElementById('fileInput').click();
@@ -763,28 +767,30 @@ class FileManager {
     }
     
     /**
+     * Delete single item
+     */
+    async deleteItem(path, name) {
+        this.showDeleteModal([{ path, name }], false);
+    }
+    
+    /**
      * Delete selected items
      */
     async deleteSelected() {
         if (this.selectedItems.size === 0) return;
         
-        const confirmed = confirm(`Are you sure you want to delete ${this.selectedItems.size} item(s)?`);
-        if (!confirmed) return;
+        const items = Array.from(this.selectedItems).map(path => {
+            const fileItem = document.querySelector(`[data-path="${path}"]`);
+            const name = fileItem ? fileItem.dataset.name : path.split('/').pop();
+            const isDirectory = fileItem ? fileItem.dataset.type === 'folder' : false;
+            return { path, name, isDirectory };
+        });
         
-        const promises = Array.from(this.selectedItems).map(path => 
-            fetch(`${this.apiBase}/item?path=${encodeURIComponent(path)}`, {
-                method: 'DELETE'
-            })
-        );
-        
-        try {
-            await Promise.all(promises);
-            this.showSuccess('Items deleted successfully');
-            this.clearSelection();
-            await this.loadDirectory();
-        } catch (error) {
-            console.error('Error deleting items:', error);
-            this.showError('Failed to delete some items');
+        // If only one item selected and it's a folder, use single folder delete modal
+        if (items.length === 1 && items[0].isDirectory) {
+            this.showDeleteModal(items, false); // false = not bulk, single folder
+        } else {
+            this.showDeleteModal(items, true); // true = bulk operation
         }
     }
     
@@ -953,14 +959,22 @@ class FileManager {
      */
     async handleContextAction(action, target) {
         const path = target.dataset.path;
-        const name = target.dataset.name;
+        let name = target.dataset.name;
         const isDirectory = target.dataset.type === 'folder';
         const icon = target.querySelector('.file-icon').className;
+        
+        // Fallback: extract name from path if data-name is missing
+        if (!name) {
+            name = path.split('/').pop() || path;
+        }
         
         switch (action) {
             case 'open':
                 if (isDirectory) {
                     this.navigateToPath(path);
+                } else {
+                    // For files, open in new tab (download)
+                    this.downloadItem(path, false);
                 }
                 break;
                 
@@ -976,6 +990,10 @@ class FileManager {
                 this.showMoveModal(path, name, icon);
                 break;
                 
+            case 'share':
+                this.shareItem(path, name);
+                break;
+                
             case 'delete':
                 this.deleteItem(path, name);
                 break;
@@ -989,16 +1007,119 @@ class FileManager {
     /**
      * Download item
      */
-    downloadItem(path, isDirectory) {
-        const endpoint = isDirectory ? 'download/folder' : 'download/file';
-        const url = `${this.apiBase}/${endpoint}?path=${encodeURIComponent(path)}`;
-        
-        const link = document.createElement('a');
-        link.href = url;
-        link.download = '';
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
+    async downloadItem(path, isDirectory) {
+        try {
+            if (isDirectory) {
+                // For folders, download as zip
+                const response = await fetch(`${this.apiBase}/download/folder?path=${encodeURIComponent(path)}`, {
+                    method: 'GET'
+                });
+                
+                if (response.ok) {
+                    // Get the blob and create download link
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    
+                    // Extract filename from Content-Disposition header or use default
+                    const contentDisposition = response.headers.get('Content-Disposition');
+                    let filename = 'folder.zip';
+                    if (contentDisposition) {
+                        const filenameMatch = contentDisposition.match(/filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/);
+                        if (filenameMatch && filenameMatch[1]) {
+                            filename = filenameMatch[1].replace(/['"]/g, '');
+                        }
+                    }
+                    
+                    // Create download link and trigger download
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = filename;
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                    
+                    this.showSuccess('Folder download started');
+                } else {
+                    const errorData = await response.json();
+                    this.showError(errorData.message || 'Failed to download folder');
+                }
+            } else {
+                // For files, get the download URL from the API
+                const response = await fetch(`${this.apiBase}/download/file?path=${encodeURIComponent(path)}`, {
+                    method: 'GET',
+                    redirect: 'manual' // Don't follow redirects automatically
+                });
+                
+                if (response.status === 302 || response.status === 301) {
+                    // Get the redirect URL (presigned URL)
+                    const downloadUrl = response.headers.get('Location');
+                    
+                    if (downloadUrl) {
+                        // Open in new tab/window for download
+                        window.open(downloadUrl, '_blank');
+                        this.showSuccess('Download started');
+                    } else {
+                        this.showError('Failed to get download URL');
+                    }
+                } else if (response.ok) {
+                    // Direct response - shouldn't happen with object storage but handle it
+                    const blob = await response.blob();
+                    const url = window.URL.createObjectURL(blob);
+                    const link = document.createElement('a');
+                    link.href = url;
+                    link.download = path.split('/').pop();
+                    document.body.appendChild(link);
+                    link.click();
+                    document.body.removeChild(link);
+                    window.URL.revokeObjectURL(url);
+                    this.showSuccess('Download started');
+                } else {
+                    const errorData = await response.json();
+                    this.showError(errorData.message || 'Failed to download file');
+                }
+            }
+        } catch (error) {
+            console.error('Error downloading item:', error);
+            this.showError('Failed to download item');
+        }
+    }
+    
+    /**
+     * Open item (navigate to folder or open file in new window)
+     */
+    async openItem(path, isDirectory) {
+        try {
+            if (isDirectory) {
+                // Navigate to folder
+                this.navigateToPath(path);
+            } else {
+                // For files, get signed URL and open in new window
+                const response = await fetch(`${this.apiBase}/download/file?path=${encodeURIComponent(path)}`, {
+                    method: 'GET',
+                    redirect: 'manual' // Don't follow redirects automatically
+                });
+                
+                if (response.status === 302 || response.status === 301) {
+                    // Get the redirect URL (presigned URL)
+                    const fileUrl = response.headers.get('Location');
+                    
+                    if (fileUrl) {
+                        // Open file in new window/tab
+                        window.open(fileUrl, '_blank');
+                        this.showSuccess('File opened in new window');
+                    } else {
+                        this.showError('Failed to get file URL');
+                    }
+                } else {
+                    const errorData = await response.json();
+                    this.showError(errorData.message || 'Failed to open file');
+                }
+            }
+        } catch (error) {
+            console.error('Error opening item:', error);
+            this.showError('Failed to open item');
+        }
     }
     
     /**
@@ -1056,32 +1177,6 @@ class FileManager {
         } catch (error) {
             console.error('Error renaming item:', error);
             this.showError('Failed to rename item');
-        }
-    }
-    
-    /**
-     * Delete single item
-     */
-    async deleteItem(path, name) {
-        const confirmed = confirm(`Are you sure you want to delete "${name}"?`);
-        if (!confirmed) return;
-        
-        try {
-            const response = await fetch(`${this.apiBase}/item?path=${encodeURIComponent(path)}`, {
-                method: 'DELETE'
-            });
-            
-            const data = await response.json();
-            
-            if (data.success) {
-                this.showSuccess('Item deleted successfully');
-                await this.loadDirectory();
-            } else {
-                this.showError(data.message || 'Failed to delete item');
-            }
-        } catch (error) {
-            console.error('Error deleting item:', error);
-            this.showError('Failed to delete item');
         }
     }
     
@@ -1548,6 +1643,265 @@ class FileManager {
         this.loadMoveFolders('');
         
         modal.show();
+    }
+    
+    /**
+     * Share item (generate shareable link)
+     */
+    async shareItem(path, name) {
+        try {
+            // Get download URL which is a presigned URL that can be shared
+            const response = await fetch(`${this.apiBase}/download/file?path=${encodeURIComponent(path)}`, {
+                method: 'GET',
+                redirect: 'manual' // Don't follow redirects automatically
+            });
+            
+            if (response.status === 302 || response.status === 301) {
+                // Get the redirect URL (presigned URL)
+                const shareUrl = response.headers.get('Location');
+                
+                if (shareUrl) {
+                    // Show share modal with the URL
+                    this.showShareModal(name, shareUrl);
+                } else {
+                    this.showError('Failed to generate share link');
+                }
+            } else {
+                const errorData = await response.json();
+                this.showError(errorData.message || 'Failed to generate share link');
+            }
+        } catch (error) {
+            console.error('Error generating share link:', error);
+            this.showError('Failed to generate share link');
+        }
+    }
+    
+    /**
+     * Show share modal with shareable link
+     */
+    showShareModal(fileName, shareUrl) {
+        // Create a simple modal to show the share link
+        const modalHtml = `
+            <div class="modal fade" id="shareModal" tabindex="-1">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header">
+                            <h5 class="modal-title">
+                                <i class="fas fa-share me-2"></i>Share File
+                            </h5>
+                            <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p><strong>File:</strong> ${this.escapeHtml(fileName)}</p>
+                            <p class="text-muted">Share this link to allow others to download the file:</p>
+                            <div class="input-group">
+                                <input type="text" class="form-control" id="shareUrl" value="${shareUrl}" readonly>
+                                <button class="btn btn-outline-primary" type="button" id="copyShareUrl">
+                                    <i class="fas fa-copy"></i> Copy
+                                </button>
+                            </div>
+                            <small class="text-muted mt-2 d-block">
+                                <i class="fas fa-clock me-1"></i>This link will expire in 1 hour
+                            </small>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        // Remove existing share modal if any
+        const existingModal = document.getElementById('shareModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        // Add modal to body
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        
+        // Show modal
+        const modal = new bootstrap.Modal(document.getElementById('shareModal'));
+        modal.show();
+        
+        // Add copy functionality
+        document.getElementById('copyShareUrl').addEventListener('click', () => {
+            const urlInput = document.getElementById('shareUrl');
+            urlInput.select();
+            urlInput.setSelectionRange(0, 99999); // For mobile devices
+            
+            try {
+                document.execCommand('copy');
+                this.showSuccess('Link copied to clipboard');
+            } catch (err) {
+                // Fallback for modern browsers
+                navigator.clipboard.writeText(shareUrl).then(() => {
+                    this.showSuccess('Link copied to clipboard');
+                }).catch(() => {
+                    this.showError('Failed to copy link');
+                });
+            }
+        });
+        
+        // Clean up modal when hidden
+        document.getElementById('shareModal').addEventListener('hidden.bs.modal', () => {
+            document.getElementById('shareModal').remove();
+        });
+    }
+    
+    /**
+     * Show delete confirmation modal
+     */
+    showDeleteModal(items, isBulk = false) {
+        const modal = new bootstrap.Modal(document.getElementById('deleteModal'));
+        
+        // Hide all content sections
+        document.getElementById('deleteFileContent').classList.add('d-none');
+        document.getElementById('deleteFolderContent').classList.add('d-none');
+        document.getElementById('deleteBulkContent').classList.add('d-none');
+        
+        // Reset form
+        document.getElementById('confirmFolderName').value = '';
+        document.getElementById('confirmDeleteBtn').disabled = true;
+        
+        if (isBulk) {
+            // Bulk delete
+            document.getElementById('deleteBulkContent').classList.remove('d-none');
+            document.getElementById('bulkItemCount').textContent = items.length;
+            document.getElementById('confirmDeleteBtn').disabled = false;
+            this.deleteData = { type: 'bulk', items };
+        } else {
+            // Single item delete
+            const item = items[0];
+            const fileItem = document.querySelector(`[data-path="${item.path}"]`);
+            const isDirectory = fileItem ? fileItem.dataset.type === 'folder' : false;
+            
+            if (isDirectory) {
+                // Folder delete with name confirmation
+                document.getElementById('deleteFolderContent').classList.remove('d-none');
+                
+                // Set folder name in both places with proper escaping
+                const folderNameElement = document.getElementById('deleteFolderName');
+                const folderNameToTypeElement = document.getElementById('folderNameToType');
+                
+                // Use the item name, with fallback to path extraction
+                const folderName = item.name || item.path.split('/').pop() || item.path;
+                
+                folderNameElement.textContent = folderName;
+                folderNameToTypeElement.textContent = folderName;
+                
+                this.deleteData = { type: 'folder', item, requiredName: folderName };
+            } else {
+                // File delete
+                document.getElementById('deleteFileContent').classList.remove('d-none');
+                const fileName = item.name || item.path.split('/').pop() || item.path;
+                document.getElementById('deleteFileName').textContent = fileName;
+                document.getElementById('confirmDeleteBtn').disabled = false;
+                this.deleteData = { type: 'file', item };
+            }
+        }
+        
+        modal.show();
+    }
+    
+    /**
+     * Validate folder name input
+     */
+    validateFolderName() {
+        const input = document.getElementById('confirmFolderName');
+        const confirmBtn = document.getElementById('confirmDeleteBtn');
+        
+        if (this.deleteData && this.deleteData.type === 'folder') {
+            const isValid = input.value === this.deleteData.requiredName;
+            confirmBtn.disabled = !isValid;
+            
+            // Visual feedback
+            if (input.value.length > 0) {
+                if (isValid) {
+                    input.classList.remove('is-invalid');
+                    input.classList.add('is-valid');
+                } else {
+                    input.classList.remove('is-valid');
+                    input.classList.add('is-invalid');
+                }
+            } else {
+                input.classList.remove('is-valid', 'is-invalid');
+            }
+        }
+    }
+    
+    /**
+     * Execute the confirmed delete operation
+     */
+    async executeDelete() {
+        if (!this.deleteData) return;
+        
+        try {
+            if (this.deleteData.type === 'bulk') {
+                await this.performBulkDelete(this.deleteData.items);
+            } else {
+                await this.performSingleDelete(this.deleteData.item);
+            }
+            
+            // Close modal and refresh
+            bootstrap.Modal.getInstance(document.getElementById('deleteModal')).hide();
+            this.showSuccess('Item(s) deleted successfully');
+            
+            if (this.deleteData.type === 'bulk') {
+                this.clearSelection();
+            }
+            
+            await this.loadDirectory();
+            
+        } catch (error) {
+            console.error('Error deleting items:', error);
+            this.showError('Failed to delete item(s)');
+        } finally {
+            this.deleteData = null;
+        }
+    }
+    
+    /**
+     * Perform single item delete
+     */
+    async performSingleDelete(item) {
+        const fileItem = document.querySelector(`[data-path="${item.path}"]`);
+        const isDirectory = fileItem ? fileItem.dataset.type === 'folder' : false;
+        const deletePath = isDirectory && !item.path.endsWith('/') ? item.path + '/' : item.path;
+        
+        const response = await fetch(`${this.apiBase}/item?path=${encodeURIComponent(deletePath)}`, {
+            method: 'DELETE'
+        });
+        
+        const data = await response.json();
+        
+        if (!data.success) {
+            throw new Error(data.message || 'Failed to delete item');
+        }
+    }
+    
+    /**
+     * Perform bulk delete
+     */
+    async performBulkDelete(items) {
+        const promises = items.map(item => {
+            const fileItem = document.querySelector(`[data-path="${item.path}"]`);
+            const isDirectory = fileItem ? fileItem.dataset.type === 'folder' : false;
+            const deletePath = isDirectory && !item.path.endsWith('/') ? item.path + '/' : item.path;
+            
+            return fetch(`${this.apiBase}/item?path=${encodeURIComponent(deletePath)}`, {
+                method: 'DELETE'
+            });
+        });
+        
+        const responses = await Promise.all(promises);
+        const results = await Promise.all(responses.map(r => r.json()));
+        
+        const failedItems = results.filter(r => !r.success);
+        if (failedItems.length > 0) {
+            throw new Error(`Failed to delete ${failedItems.length} item(s)`);
+        }
     }
 }
 

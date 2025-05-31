@@ -7,6 +7,7 @@ Handles file operations with various object storage providers (S3, DigitalOcean 
 import os
 import io
 import mimetypes
+import zipfile
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional, Tuple, BinaryIO
 from pathlib import Path
@@ -302,24 +303,74 @@ class ObjectStorageService:
         """Delete object from storage."""
         try:
             object_key = self._get_object_key(path)
+            logger.info(f"Attempting to delete object: {object_key} (original path: {path})")
             
-            # Check if it's a folder (ends with /)
+            # Determine if this is a folder by checking the UI data or path structure
+            is_folder = False
+            
+            # Check if it's explicitly a folder (ends with /) or if it has objects with this prefix
             if path.endswith('/'):
-                # Delete all objects with this prefix
+                is_folder = True
+                folder_prefix = object_key
+            else:
+                # Check if this path represents a folder by looking for objects with this prefix
+                folder_prefix = object_key + '/'
+                paginator = self.s3_client.get_paginator('list_objects_v2')
+                pages = paginator.paginate(Bucket=self.bucket, Prefix=folder_prefix, MaxKeys=1)
+                
+                for page in pages:
+                    if page.get('Contents') or page.get('CommonPrefixes'):
+                        is_folder = True
+                        break
+                
+                # If not a folder, check if the file exists
+                if not is_folder:
+                    try:
+                        self.s3_client.head_object(Bucket=self.bucket, Key=object_key)
+                    except ClientError as e:
+                        if e.response['Error']['Code'] == '404':
+                            raise HTTPException(status_code=404, detail="File not found")
+                        else:
+                            logger.error(f"Error checking object existence: {e}")
+                            raise HTTPException(status_code=500, detail=f"Error accessing file: {e.response['Error']['Code']}")
+            
+            if is_folder:
+                # Delete all objects with this prefix (folder and its contents)
                 objects_to_delete = []
                 paginator = self.s3_client.get_paginator('list_objects_v2')
-                pages = paginator.paginate(Bucket=self.bucket, Prefix=object_key)
+                pages = paginator.paginate(Bucket=self.bucket, Prefix=folder_prefix)
                 
                 for page in pages:
                     for obj in page.get('Contents', []):
                         objects_to_delete.append({'Key': obj['Key']})
                 
+                # Also check for the folder marker object (without trailing slash)
+                if not path.endswith('/'):
+                    try:
+                        self.s3_client.head_object(Bucket=self.bucket, Key=object_key)
+                        objects_to_delete.append({'Key': object_key})
+                    except ClientError:
+                        pass  # Folder marker doesn't exist, that's fine
+                
                 if objects_to_delete:
-                    self.s3_client.delete_objects(
+                    logger.info(f"Deleting {len(objects_to_delete)} objects in folder")
+                    response = self.s3_client.delete_objects(
                         Bucket=self.bucket,
                         Delete={'Objects': objects_to_delete}
                     )
+                    
+                    # Check for errors in batch delete
+                    if 'Errors' in response and response['Errors']:
+                        logger.error(f"Errors during batch delete: {response['Errors']}")
+                        raise HTTPException(status_code=500, detail="Some files could not be deleted")
+                else:
+                    # Empty folder, just delete the folder marker if it exists
+                    try:
+                        self.s3_client.delete_object(Bucket=self.bucket, Key=folder_prefix)
+                    except ClientError:
+                        pass  # Folder marker doesn't exist
                 
+                logger.info(f"Successfully deleted folder: {object_key}")
                 return {
                     "message": "Folder deleted successfully",
                     "name": path.rstrip('/').split('/')[-1],
@@ -328,6 +379,7 @@ class ObjectStorageService:
             else:
                 # Delete single file
                 self.s3_client.delete_object(Bucket=self.bucket, Key=object_key)
+                logger.info(f"Successfully deleted file: {object_key}")
                 
                 return {
                     "message": "File deleted successfully",
@@ -335,8 +387,19 @@ class ObjectStorageService:
                     "type": "file"
                 }
                 
+        except HTTPException:
+            raise
+        except ClientError as e:
+            error_code = e.response['Error']['Code']
+            logger.error(f"AWS error deleting object {object_key}: {error_code} - {e}")
+            if error_code == '404':
+                raise HTTPException(status_code=404, detail="File not found")
+            elif error_code == '403':
+                raise HTTPException(status_code=403, detail="Access denied")
+            else:
+                raise HTTPException(status_code=500, detail=f"Storage error: {error_code}")
         except Exception as e:
-            logger.error(f"Error deleting object: {e}")
+            logger.error(f"Unexpected error deleting object {object_key}: {e}")
             raise HTTPException(status_code=500, detail="Failed to delete item")
     
     async def create_folder(self, path: str, folder_name: str) -> Dict:
@@ -428,6 +491,183 @@ class ObjectStorageService:
         except Exception as e:
             logger.error(f"Error getting object info: {e}")
             raise HTTPException(status_code=500, detail="Failed to get file information")
+
+    async def download_folder_as_zip(self, path: str) -> Tuple[io.BytesIO, str]:
+        """Download all files in a folder as a zip file."""
+        try:
+            object_key = self._get_object_key(path)
+            if object_key and not object_key.endswith('/'):
+                object_key += '/'
+            
+            # Create zip file in memory
+            zip_buffer = io.BytesIO()
+            
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                # List all objects in the folder and its subfolders
+                paginator = self.s3_client.get_paginator('list_objects_v2')
+                pages = paginator.paginate(Bucket=self.bucket, Prefix=object_key)
+                
+                file_count = 0
+                for page in pages:
+                    for obj in page.get('Contents', []):
+                        # Skip the folder marker itself
+                        if obj['Key'] == object_key or obj['Key'].endswith('/'):
+                            continue
+                        
+                        # Get relative path within the folder
+                        relative_path = obj['Key'][len(object_key):]
+                        
+                        # Download file content
+                        try:
+                            response = self.s3_client.get_object(Bucket=self.bucket, Key=obj['Key'])
+                            file_content = response['Body'].read()
+                            
+                            # Add file to zip
+                            zip_file.writestr(relative_path, file_content)
+                            file_count += 1
+                            
+                        except Exception as e:
+                            logger.warning(f"Failed to add file {obj['Key']} to zip: {e}")
+                            continue
+                
+                if file_count == 0:
+                    # Add empty file to indicate empty folder
+                    zip_file.writestr('_empty_folder.txt', 'This folder was empty when downloaded.')
+            
+            zip_buffer.seek(0)
+            
+            # Generate zip filename
+            folder_name = path.rstrip('/').split('/')[-1] if path else 'root'
+            zip_filename = f"{folder_name}.zip"
+            
+            logger.info(f"Created zip file for folder {path} with {file_count} files")
+            
+            return zip_buffer, zip_filename
+            
+        except Exception as e:
+            logger.error(f"Error creating zip file for folder {path}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to create folder download")
+    
+    async def download_folder(self, path: str, output_dir: str) -> Dict:
+        """Download all files in a folder and its subfolders."""
+        try:
+            object_key = self._get_object_key(path)
+            
+            # List all objects in the folder and its subfolders
+            paginator = self.s3_client.get_paginator('list_objects_v2')
+            pages = paginator.paginate(Bucket=self.bucket, Prefix=object_key)
+            
+            for page in pages:
+                for obj in page.get('Contents', []):
+                    # Skip the prefix itself
+                    if obj['Key'] == object_key:
+                        continue
+                    
+                    # Only include direct children (not nested)
+                    relative_key = obj['Key'][len(object_key):]
+                    if '/' in relative_key:
+                        continue
+                    
+                    file_name = relative_key
+                    
+                    # Download each file
+                    self.download_file(file_name, output_dir)
+            
+            return {
+                "message": "Folder downloaded successfully",
+                "name": path.rstrip('/').split('/')[-1],
+                "type": "folder"
+            }
+            
+        except Exception as e:
+            logger.error(f"Error downloading folder: {e}")
+            raise HTTPException(status_code=500, detail="Failed to download folder")
+
+    async def download_file(self, path: str, output_dir: str) -> Dict:
+        """Download a single file from object storage."""
+        try:
+            object_key = self._get_object_key(path)
+            
+            # Create output directory if it doesn't exist
+            os.makedirs(output_dir, exist_ok=True)
+            
+            # Download file
+            response = self.s3_client.get_object(Bucket=self.bucket, Key=object_key)
+            
+            # Save file to disk
+            file_path = os.path.join(output_dir, os.path.basename(path))
+            with open(file_path, 'wb') as f:
+                f.write(response['Body'].read())
+            
+            logger.info(f"Downloaded file from object storage: {object_key}")
+            
+            return {
+                "message": "File downloaded successfully",
+                "filename": os.path.basename(path),
+                "path": path,
+                "size": response['ContentLength'],
+                "size_formatted": self._format_file_size(response['ContentLength'])
+            }
+            
+        except Exception as e:
+            logger.error(f"Error downloading file: {e}")
+            raise HTTPException(status_code=500, detail="Failed to download file")
+
+    async def create_folder_zip(self, path: str) -> Tuple[io.BytesIO, str]:
+        """Create a zip file containing all files in a folder."""
+        try:
+            object_key = self._get_object_key(path)
+            if object_key and not object_key.endswith('/'):
+                object_key += '/'
+            
+            # Create zip file in memory
+            zip_buffer = io.BytesIO()
+            
+            with zipfile.ZipFile(zip_buffer, 'w', zipfile.ZIP_DEFLATED) as zip_file:
+                # List all objects in the folder
+                paginator = self.s3_client.get_paginator('list_objects_v2')
+                pages = paginator.paginate(Bucket=self.bucket, Prefix=object_key)
+                
+                file_count = 0
+                for page in pages:
+                    for obj in page.get('Contents', []):
+                        # Skip folder markers
+                        if obj['Key'] == object_key or obj['Key'].endswith('/'):
+                            continue
+                        
+                        # Get relative path within the folder
+                        relative_path = obj['Key'][len(object_key):]
+                        
+                        try:
+                            # Download file content
+                            response = self.s3_client.get_object(Bucket=self.bucket, Key=obj['Key'])
+                            file_content = response['Body'].read()
+                            
+                            # Add file to zip
+                            zip_file.writestr(relative_path, file_content)
+                            file_count += 1
+                            
+                        except Exception as e:
+                            logger.warning(f"Failed to add file {obj['Key']} to zip: {e}")
+                            continue
+                
+                if file_count == 0:
+                    # Add empty file to indicate empty folder
+                    zip_file.writestr('_empty_folder.txt', 'This folder was empty when downloaded.')
+            
+            zip_buffer.seek(0)
+            
+            # Generate zip filename
+            folder_name = path.rstrip('/').split('/')[-1] if path else 'root'
+            zip_filename = f"{folder_name}.zip"
+            
+            logger.info(f"Created zip file for folder {path} with {file_count} files")
+            
+            return zip_buffer, zip_filename
+            
+        except Exception as e:
+            logger.error(f"Error creating zip file for folder {path}: {e}")
+            raise HTTPException(status_code=500, detail="Failed to create folder download")
 
 
 # Service instance

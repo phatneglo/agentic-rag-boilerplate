@@ -1,8 +1,9 @@
 """
-File Manager Service with Object Storage
+File Manager Service with Object Storage and User-Scoped Paths
 
 Handles all file operations using object storage (S3, DigitalOcean Spaces, MinIO)
-instead of local file storage.
+with user-scoped directory isolation. Frontend sees relative paths while backend 
+works with user-specific absolute paths.
 """
 
 import mimetypes
@@ -22,19 +23,57 @@ logger = get_logger(__name__)
 
 
 class FileManagerService:
-    """Service for managing files and folders with object storage integration."""
+    """Service for managing files and folders with object storage integration and user-scoped paths."""
     
     def __init__(self):
         self.storage = object_storage_service
         self.max_file_size = settings.max_file_size_mb * 1024 * 1024  # Convert to bytes
         self.allowed_extensions = settings.allowed_extensions_list
     
-    def _build_breadcrumbs(self, path: str) -> List[Dict]:
-        """Build breadcrumb navigation."""
+    def _get_absolute_path(self, user_base_path: str, relative_path: str) -> str:
+        """
+        Convert relative path (from frontend) to absolute path (for storage).
+        
+        Args:
+            user_base_path: User's base directory (e.g., "user-files/user123")
+            relative_path: Path relative to user's directory (e.g., "folder1/file.txt")
+        
+        Returns:
+            Absolute path for storage (e.g., "user-files/user123/folder1/file.txt")
+        """
+        if not relative_path or relative_path == "":
+            return user_base_path
+        
+        # Remove leading slash if present
+        if relative_path.startswith("/"):
+            relative_path = relative_path[1:]
+        
+        return f"{user_base_path}/{relative_path}"
+    
+    def _get_relative_path(self, user_base_path: str, absolute_path: str) -> str:
+        """
+        Convert absolute path (from storage) to relative path (for frontend).
+        
+        Args:
+            user_base_path: User's base directory (e.g., "user-files/user123")
+            absolute_path: Absolute path from storage (e.g., "user-files/user123/folder1/file.txt")
+        
+        Returns:
+            Relative path for frontend (e.g., "folder1/file.txt")
+        """
+        if not absolute_path.startswith(user_base_path):
+            return absolute_path
+        
+        # Remove user base path prefix
+        relative = absolute_path[len(user_base_path):].strip('/')
+        return relative
+    
+    def _build_breadcrumbs(self, relative_path: str) -> List[Dict]:
+        """Build breadcrumb navigation using relative paths (frontend perspective)."""
         breadcrumbs = [{"name": "Home", "path": ""}]
         
-        if path:
-            parts = path.strip('/').split('/')
+        if relative_path:
+            parts = relative_path.strip('/').split('/')
             current_path = ""
             
             for part in parts:
@@ -47,65 +86,142 @@ class FileManagerService:
         
         return breadcrumbs
     
-    async def list_directory(self, path: str = "", search: str = "") -> Dict:
-        """List directory contents with optional search."""
+    def _convert_item_paths_to_relative(self, items: List[Dict], user_base_path: str) -> List[Dict]:
+        """Convert item paths from absolute to relative for frontend display."""
+        converted_items = []
+        
+        for item in items:
+            converted_item = item.copy()
+            # Convert the path to relative
+            converted_item["path"] = self._get_relative_path(user_base_path, item["path"])
+            converted_items.append(converted_item)
+        
+        return converted_items
+    
+    async def list_directory(self, user_base_path: str, relative_path: str = "", search: str = "") -> Dict:
+        """
+        List directory contents with optional search.
+        
+        Args:
+            user_base_path: User's base directory (e.g., "user-files/user123")
+            relative_path: Path relative to user's directory (e.g., "folder1")
+            search: Optional search query
+        """
         try:
-            items = await self.storage.list_objects(prefix=path, search=search)
+            # Convert relative path to absolute path for storage
+            absolute_path = self._get_absolute_path(user_base_path, relative_path)
+            
+            logger.debug(f"Listing directory: relative='{relative_path}' -> absolute='{absolute_path}'")
+            
+            # Get items from storage using absolute path
+            items = await self.storage.list_objects(prefix=absolute_path, search=search)
+            
+            # Convert item paths back to relative paths for frontend
+            relative_items = self._convert_item_paths_to_relative(items, user_base_path)
             
             # Sort: directories first, then files, both alphabetically
-            items.sort(key=lambda x: (not x["is_directory"], x["name"].lower()))
+            relative_items.sort(key=lambda x: (not x["is_directory"], x["name"].lower()))
             
-            # Build breadcrumb navigation
-            breadcrumbs = self._build_breadcrumbs(path)
+            # Build breadcrumb navigation using relative path
+            breadcrumbs = self._build_breadcrumbs(relative_path)
             
             return {
-                "current_path": path,
-                "items": items,
-                "breadcrumbs": breadcrumbs,
-                "total_items": len(items),
+                "current_path": relative_path,  # Return relative path to frontend
+                "items": relative_items,        # Items with relative paths
+                "breadcrumbs": breadcrumbs,     # Breadcrumbs with relative paths
+                "total_items": len(relative_items),
                 "search_query": search
             }
             
         except Exception as e:
-            logger.error(f"Error listing directory {path}: {e}")
+            logger.error(f"Error listing directory {relative_path} (user: {user_base_path}): {e}")
             raise HTTPException(status_code=500, detail="Failed to list directory")
     
-    async def create_folder(self, path: str, folder_name: str) -> Dict:
-        """Create a new folder."""
+    async def create_folder(self, user_base_path: str, relative_path: str, folder_name: str) -> Dict:
+        """
+        Create a new folder.
+        
+        Args:
+            user_base_path: User's base directory
+            relative_path: Path relative to user's directory where folder should be created
+            folder_name: Name of the new folder
+        """
         try:
-            return await self.storage.create_folder(path, folder_name)
+            # Convert to absolute path for storage
+            absolute_path = self._get_absolute_path(user_base_path, relative_path)
+            
+            logger.debug(f"Creating folder '{folder_name}' in: relative='{relative_path}' -> absolute='{absolute_path}'")
+            
+            result = await self.storage.create_folder(absolute_path, folder_name)
+            
+            # Convert result paths back to relative if needed
+            if "path" in result:
+                result["path"] = self._get_relative_path(user_base_path, result["path"])
+            
+            return result
+            
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error creating folder {folder_name} in {path}: {e}")
+            logger.error(f"Error creating folder {folder_name} in {relative_path} (user: {user_base_path}): {e}")
             raise HTTPException(status_code=500, detail="Failed to create folder")
     
-    async def upload_file(self, path: str, file: UploadFile) -> Dict:
-        """Upload a file to the specified path."""
+    async def upload_file(self, user_base_path: str, relative_path: str, file: UploadFile) -> Dict:
+        """
+        Upload a file to the specified path.
+        
+        Args:
+            user_base_path: User's base directory
+            relative_path: Path relative to user's directory where file should be uploaded
+            file: File to upload
+        """
         try:
             # Validate file
             if not file.filename:
                 raise HTTPException(status_code=400, detail="No file provided")
             
-            return await self.storage.upload_file(file, path)
+            # Convert to absolute path for storage
+            absolute_path = self._get_absolute_path(user_base_path, relative_path)
+            
+            logger.debug(f"Uploading file '{file.filename}' to: relative='{relative_path}' -> absolute='{absolute_path}'")
+            
+            result = await self.storage.upload_file(file, absolute_path)
+            
+            # Convert result paths back to relative if needed
+            if "path" in result:
+                result["path"] = self._get_relative_path(user_base_path, result["path"])
+            
+            return result
             
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error uploading file {file.filename} to {path}: {e}")
+            logger.error(f"Error uploading file {file.filename} to {relative_path} (user: {user_base_path}): {e}")
             raise HTTPException(status_code=500, detail="Failed to upload file")
     
-    async def delete_item(self, path: str) -> Dict:
-        """Delete a file or folder."""
+    async def delete_item(self, user_base_path: str, relative_path: str) -> Dict:
+        """
+        Delete a file or folder.
+        
+        Args:
+            user_base_path: User's base directory
+            relative_path: Path relative to user's directory of item to delete
+        """
         try:
-            return await self.storage.delete_object(path)
+            # Convert to absolute path for storage
+            absolute_path = self._get_absolute_path(user_base_path, relative_path)
+            
+            logger.debug(f"Deleting item: relative='{relative_path}' -> absolute='{absolute_path}'")
+            
+            return await self.storage.delete_object(absolute_path)
+            
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error deleting item {path}: {e}")
+            logger.error(f"Error deleting item {relative_path} (user: {user_base_path}): {e}")
             raise HTTPException(status_code=500, detail="Failed to delete item")
     
-    async def rename_item(self, path: str, new_name: str) -> Dict:
+    async def rename_item(self, user_base_path: str, relative_path: str, new_name: str) -> Dict:
         """Rename a file or folder by copying to new location and deleting original."""
         try:
             if not new_name or new_name.strip() == "":
@@ -114,31 +230,30 @@ class FileManagerService:
             if any(char in new_name for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']):
                 raise HTTPException(status_code=400, detail="Invalid characters in name")
             
-            # Get the parent path and create new path
-            path_parts = path.split('/')
-            parent_path = '/'.join(path_parts[:-1]) if len(path_parts) > 1 else ""
-            new_path = f"{parent_path}/{new_name}" if parent_path else new_name
+            # Convert to absolute paths
+            absolute_source_path = self._get_absolute_path(user_base_path, relative_path)
+            absolute_new_path = self._get_absolute_path(user_base_path, new_name)
             
             # Check if new name already exists
-            if await self.storage._object_exists(self.storage._get_object_key(new_path)):
+            if await self.storage._object_exists(self.storage._get_object_key(absolute_new_path)):
                 raise HTTPException(status_code=409, detail="Item with this name already exists")
             
             # For files: copy and delete
-            if not path.endswith('/'):
+            if not relative_path.endswith('/'):
                 # Copy file to new location
-                copy_source = {'Bucket': self.storage.bucket, 'Key': self.storage._get_object_key(path)}
+                copy_source = {'Bucket': self.storage.bucket, 'Key': self.storage._get_object_key(absolute_source_path)}
                 self.storage.s3_client.copy_object(
                     CopySource=copy_source,
                     Bucket=self.storage.bucket,
-                    Key=self.storage._get_object_key(new_path)
+                    Key=self.storage._get_object_key(absolute_new_path)
                 )
                 
                 # Delete original file
-                await self.storage.delete_object(path)
+                await self.storage.delete_object(absolute_source_path)
             else:
                 # For folders: copy all objects with the prefix
-                old_prefix = self.storage._get_object_key(path)
-                new_prefix = self.storage._get_object_key(new_path) + '/'
+                old_prefix = self.storage._get_object_key(absolute_source_path)
+                new_prefix = self.storage._get_object_key(absolute_new_path) + '/'
                 
                 # List all objects with the old prefix
                 paginator = self.storage.s3_client.get_paginator('list_objects_v2')
@@ -167,54 +282,59 @@ class FileManagerService:
                         Delete={'Objects': delete_objects}
                     )
             
-            logger.info(f"Renamed {path} to {new_path}")
+            logger.info(f"Renamed {relative_path} to {new_name}")
             
             return {
                 "message": "Item renamed successfully",
-                "old_name": path_parts[-1],
+                "old_name": relative_path.split('/')[-1],
                 "new_name": new_name,
-                "new_path": new_path
+                "new_path": new_name
             }
             
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error renaming item {path} to {new_name}: {e}")
+            logger.error(f"Error renaming item {relative_path} to {new_name}: {e}")
             raise HTTPException(status_code=500, detail="Failed to rename item")
     
-    async def move_item(self, source_path: str, destination_path: str, new_name: Optional[str] = None) -> Dict:
+    async def move_item(self, user_base_path: str, source_relative_path: str, destination_relative_path: str, new_name: Optional[str] = None) -> Dict:
         """Move a file or folder to a new location by copying and deleting."""
         try:
+            # Convert to absolute paths
+            absolute_source_path = self._get_absolute_path(user_base_path, source_relative_path)
+            absolute_destination_path = self._get_absolute_path(user_base_path, destination_relative_path)
+            
             # Get source item name
-            source_parts = source_path.split('/')
+            source_parts = source_relative_path.split('/')
             item_name = source_parts[-1]
             
             # Use new name if provided, otherwise keep original name
             final_name = new_name if new_name else item_name
             
             # Create destination path
-            dest_path = f"{destination_path}/{final_name}" if destination_path else final_name
+            dest_relative_path = f"{destination_relative_path}/{final_name}" if destination_relative_path else final_name
+            absolute_dest_path = self._get_absolute_path(user_base_path, dest_relative_path)
             
             # Check if destination already exists
-            if await self.storage._object_exists(self.storage._get_object_key(dest_path)):
+            if await self.storage._object_exists(self.storage._get_object_key(absolute_dest_path)):
                 raise HTTPException(status_code=409, detail="Item already exists in destination")
             
             # For files: copy and delete
-            if not source_path.endswith('/'):
+            if not source_relative_path.endswith('/'):
                 # Copy file to new location
-                copy_source = {'Bucket': self.storage.bucket, 'Key': self.storage._get_object_key(source_path)}
+                copy_source = {'Bucket': self.storage.bucket, 'Key': self.storage._get_object_key(absolute_source_path)}
                 self.storage.s3_client.copy_object(
                     CopySource=copy_source,
                     Bucket=self.storage.bucket,
-                    Key=self.storage._get_object_key(dest_path)
+                    Key=self.storage._get_object_key(absolute_dest_path)
                 )
                 
                 # Delete original file
-                await self.storage.delete_object(source_path)
+                await self.storage.delete_object(absolute_source_path)
             else:
                 # For folders: copy all objects with the prefix
-                old_prefix = self.storage._get_object_key(source_path)
-                new_prefix = self.storage._get_object_key(dest_path) + '/'
+                old_prefix = self.storage._get_object_key(absolute_source_path)
+                new_prefix = self.storage._get_object_key(absolute_dest_path) + '/'
                 
                 # List all objects with the old prefix
                 paginator = self.storage.s3_client.get_paginator('list_objects_v2')
@@ -243,28 +363,31 @@ class FileManagerService:
                         Delete={'Objects': delete_objects}
                     )
             
-            logger.info(f"Moved {source_path} to {dest_path}")
+            logger.info(f"Moved {source_relative_path} to {dest_relative_path}")
             
             return {
                 "message": "Item moved successfully",
                 "name": final_name,
-                "source_path": source_path,
-                "destination_path": dest_path
+                "source_path": source_relative_path,
+                "destination_path": dest_relative_path
             }
             
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error moving item {source_path} to {destination_path}: {e}")
+            logger.error(f"Error moving item {source_relative_path} to {destination_relative_path}: {e}")
             raise HTTPException(status_code=500, detail="Failed to move item")
     
-    async def download_file(self, path: str) -> Tuple[str, str]:
+    async def download_file(self, user_base_path: str, relative_path: str) -> Tuple[str, str]:
         """Get download URL for a file."""
         try:
-            download_url = await self.storage.get_download_url(path)
+            # Convert to absolute path for storage
+            absolute_path = self._get_absolute_path(user_base_path, relative_path)
+            
+            download_url = await self.storage.get_download_url(absolute_path)
             
             # Get file info to determine MIME type
-            file_info = await self.storage.get_object_info(path)
+            file_info = await self.storage.get_object_info(absolute_path)
             mime_type = file_info.get('mime_type', 'application/octet-stream')
             
             return download_url, mime_type
@@ -272,22 +395,28 @@ class FileManagerService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error getting download URL for {path}: {e}")
+            logger.error(f"Error getting download URL for {relative_path} (user: {user_base_path}): {e}")
             raise HTTPException(status_code=500, detail="Failed to get download URL")
     
-    async def create_folder_zip(self, path: str) -> Tuple:
+    async def create_folder_zip(self, user_base_path: str, relative_path: str) -> Tuple:
         """Create a zip file containing all files in a folder."""
         try:
-            return await self.storage.create_folder_zip(path)
+            # Convert to absolute path for storage
+            absolute_path = self._get_absolute_path(user_base_path, relative_path)
+            
+            return await self.storage.create_folder_zip(absolute_path)
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error creating zip for folder {path}: {e}")
+            logger.error(f"Error creating zip for folder {relative_path} (user: {user_base_path}): {e}")
             raise HTTPException(status_code=500, detail="Failed to create folder zip")
     
-    async def download_folder(self, path: str) -> Tuple[Path, str]:
+    async def download_folder(self, user_base_path: str, relative_path: str) -> Tuple[Path, str]:
         """Create zip archive of folder for download."""
         try:
+            # Convert to absolute path for storage
+            absolute_path = self._get_absolute_path(user_base_path, relative_path)
+            
             # This is complex for object storage as we need to download all files first
             # For now, return an error
             raise HTTPException(status_code=501, detail="Folder download not yet implemented for object storage")
@@ -295,57 +424,73 @@ class FileManagerService:
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error creating zip for folder {path}: {e}")
+            logger.error(f"Error creating zip for folder {relative_path} (user: {user_base_path}): {e}")
             raise HTTPException(status_code=500, detail="Failed to create folder archive")
     
-    async def search_files(self, query: str, path: str = "") -> Dict:
+    async def search_files(self, user_base_path: str, query: str, relative_path: str = "") -> Dict:
         """Search for files and folders."""
         try:
             if not query or len(query.strip()) < 2:
                 raise HTTPException(status_code=400, detail="Search query must be at least 2 characters")
             
+            # Convert to absolute path for storage
+            absolute_path = self._get_absolute_path(user_base_path, relative_path)
+            
             # Use the list_objects method with search
-            items = await self.storage.list_objects(prefix=path, search=query.strip())
+            items = await self.storage.list_objects(prefix=absolute_path, search=query.strip())
             
-            # Filter results that match the search query
-            query_lower = query.lower().strip()
-            results = []
+            # Convert item paths back to relative paths for frontend
+            relative_items = self._convert_item_paths_to_relative(items, user_base_path)
             
-            for item in items:
-                if query_lower in item["name"].lower():
-                    # Add relative path from search root
-                    item["relative_path"] = item["path"]
-                    results.append(item)
+            # Filter results that match the search query (case-insensitive)
+            query_lower = query.strip().lower()
+            results = [
+                item for item in relative_items
+                if query_lower in item["name"].lower()
+            ]
             
-            # Sort results: exact matches first, then directories, then files
             def sort_key(item):
-                exact_match = item["name"].lower() == query_lower
-                return (not exact_match, not item["is_directory"], item["name"].lower())
+                name_lower = item["name"].lower()
+                query_lower_stripped = query_lower
+                
+                # Exact match gets highest priority
+                if name_lower == query_lower_stripped:
+                    return (0, name_lower)
+                # Starts with query gets second priority
+                elif name_lower.startswith(query_lower_stripped):
+                    return (1, name_lower)
+                # Contains query gets third priority
+                else:
+                    return (2, name_lower)
             
+            # Sort results by relevance
             results.sort(key=sort_key)
             
             return {
                 "query": query,
-                "search_path": path,
-                "results": results,
+                "search_path": relative_path,  # Return relative path
+                "results": results,            # Results with relative paths
                 "total_results": len(results)
             }
             
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error searching for '{query}' in {path}: {e}")
+            logger.error(f"Error searching for '{query}' in {relative_path} (user: {user_base_path}): {e}")
             raise HTTPException(status_code=500, detail="Search failed")
     
-    async def get_file_info(self, path: str) -> Dict:
+    async def get_file_info(self, user_base_path: str, relative_path: str) -> Dict:
         """Get detailed information about a file or folder."""
         try:
-            return await self.storage.get_object_info(path)
+            # Convert to absolute path for storage
+            absolute_path = self._get_absolute_path(user_base_path, relative_path)
+            
+            return await self.storage.get_object_info(absolute_path)
             
         except HTTPException:
             raise
         except Exception as e:
-            logger.error(f"Error getting file info for {path}: {e}")
+            logger.error(f"Error getting file info for {relative_path} (user: {user_base_path}): {e}")
             raise HTTPException(status_code=500, detail="Failed to get file information")
 
 

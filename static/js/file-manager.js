@@ -157,7 +157,9 @@ class FileManager {
                 search: this.searchQuery
             });
             
-            const response = await fetch(`${this.apiBase}/?${params}`);
+            const response = await fetch(`${this.apiBase}/?${params}`, {
+                headers: window.AuthUtils.getAuthHeaders()
+            });
             const data = await response.json();
             
             if (data.success) {
@@ -449,7 +451,9 @@ class FileManager {
                 path: this.currentPath
             });
             
-            const response = await fetch(`${this.apiBase}/search?${params}`);
+            const response = await fetch(`${this.apiBase}/search?${params}`, {
+                headers: window.AuthUtils.getAuthHeaders()
+            });
             const data = await response.json();
             
             if (data.success) {
@@ -742,9 +746,7 @@ class FileManager {
         try {
             const response = await fetch(`${this.apiBase}/folder`, {
                 method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: window.AuthUtils.getAuthHeaders(),
                 body: JSON.stringify({
                     path: this.currentPath,
                     folder_name: folderName
@@ -826,6 +828,7 @@ class FileManager {
             try {
                 const response = await fetch(`${this.apiBase}/upload`, {
                     method: 'POST',
+                    headers: window.AuthUtils.getAuthHeadersForFormData(),
                     body: formData
                 });
                 
@@ -1007,7 +1010,8 @@ class FileManager {
             if (isDirectory) {
                 // For folders, download as zip
                 const response = await fetch(`${this.apiBase}/download/folder?path=${encodeURIComponent(path)}`, {
-                    method: 'GET'
+                    method: 'GET',
+                    headers: window.AuthUtils.getAuthHeaders()
                 });
                 
                 if (response.ok) {
@@ -1048,9 +1052,10 @@ class FileManager {
                     this.showError(errorMessage);
                 }
             } else {
-                // For files, get the download URL from the API
+                // For files, get signed URL and open in new window
                 const response = await fetch(`${this.apiBase}/download/file?path=${encodeURIComponent(path)}`, {
                     method: 'GET',
+                    headers: window.AuthUtils.getAuthHeaders(),
                     redirect: 'manual' // Don't follow redirects automatically
                 });
                 
@@ -1108,6 +1113,7 @@ class FileManager {
                 // For files, get signed URL and open in new window
                 const response = await fetch(`${this.apiBase}/download/file?path=${encodeURIComponent(path)}`, {
                     method: 'GET',
+                    headers: window.AuthUtils.getAuthHeaders(),
                     redirect: 'manual' // Don't follow redirects automatically
                 });
                 
@@ -1175,9 +1181,7 @@ class FileManager {
         try {
             const response = await fetch(`${this.apiBase}/rename`, {
                 method: 'PUT',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
+                headers: window.AuthUtils.getAuthHeaders(),
                 body: JSON.stringify({
                     path: path,
                     new_name: newName
@@ -1204,7 +1208,9 @@ class FileManager {
      */
     async showFileInfo(path) {
         try {
-            const response = await fetch(`${this.apiBase}/info?path=${encodeURIComponent(path)}`);
+            const response = await fetch(`${this.apiBase}/info?path=${encodeURIComponent(path)}`, {
+                headers: window.AuthUtils.getAuthHeaders()
+            });
             const data = await response.json();
             
             if (data.success) {
@@ -1404,7 +1410,9 @@ class FileManager {
         
         try {
             const params = new URLSearchParams({ path });
-            const response = await fetch(`${this.apiBase}/?${params}`);
+            const response = await fetch(`${this.apiBase}/?${params}`, {
+                headers: window.AuthUtils.getAuthHeaders()
+            });
             const data = await response.json();
             
             if (data.success) {
@@ -1553,9 +1561,7 @@ class FileManager {
                 const promises = this.moveItemData.paths.map(path => 
                     fetch(`${this.apiBase}/move`, {
                         method: 'PUT',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        headers: window.AuthUtils.getAuthHeaders(),
                         body: JSON.stringify({
                             source_path: path,
                             destination_path: destinationPath
@@ -1586,9 +1592,7 @@ class FileManager {
                 
                 const response = await fetch(`${this.apiBase}/move`, {
                     method: 'PUT',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
+                    headers: window.AuthUtils.getAuthHeaders(),
                     body: JSON.stringify({
                         source_path: this.moveItemData.path,
                         destination_path: destinationPath
@@ -1666,6 +1670,7 @@ class FileManager {
             // Get download URL which is a presigned URL that can be shared
             const response = await fetch(`${this.apiBase}/download/file?path=${encodeURIComponent(path)}`, {
                 method: 'GET',
+                headers: window.AuthUtils.getAuthHeaders(),
                 redirect: 'manual' // Don't follow redirects automatically
             });
             
@@ -1917,7 +1922,8 @@ class FileManager {
         const deletePath = isDirectory && !item.path.endsWith('/') ? item.path + '/' : item.path;
         
         const response = await fetch(`${this.apiBase}/item?path=${encodeURIComponent(deletePath)}`, {
-            method: 'DELETE'
+            method: 'DELETE',
+            headers: window.AuthUtils.getAuthHeaders()
         });
         
         const data = await response.json();
@@ -1937,7 +1943,8 @@ class FileManager {
             const deletePath = isDirectory && !item.path.endsWith('/') ? item.path + '/' : item.path;
             
             return fetch(`${this.apiBase}/item?path=${encodeURIComponent(deletePath)}`, {
-                method: 'DELETE'
+                method: 'DELETE',
+                headers: window.AuthUtils.getAuthHeaders()
             });
         });
         

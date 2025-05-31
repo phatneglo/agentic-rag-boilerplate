@@ -1,302 +1,244 @@
-# Document Processing API
+# Agentic RAG - AI Chat System
 
-A FastAPI-based document processing service with Redis queue management using BullMQ for background task processing.
+A complete AI chat system with modular architecture, featuring document processing, file management, and an interactive chat interface with artifacts support.
 
-## Features
+## 🚀 Features
 
-- **Document Conversion**: Convert documents to Markdown format
-- **Document Indexing**: Index documents to Typesense and Qdrant vector databases
-- **Document Synchronization**: Sync documents across systems
-- **Background Processing**: Asynchronous task processing with BullMQ
-- **RORO Pattern**: Request-Response Object pattern implementation
-- **Scalable Architecture**: Separate API and worker processes
+### 📊 Dashboard
+- **AdminLTE-themed dashboard** with real-time system monitoring
+- **API health monitoring** with live status updates
+- **File storage metrics** and usage statistics
+- **Navigation between modules** (Dashboard, Chat, File Manager)
 
-## Architecture
+### 💬 AI Chat Interface
+- **Claude-inspired design** with modern, responsive UI
+- **Real-time WebSocket communication** for instant responses
+- **Artifacts system** supporting:
+  - Code snippets with syntax highlighting (Prism.js)
+  - Mermaid diagrams and flowcharts
+  - HTML/Markdown rendering
+  - JSON formatting and validation
+- **File upload support** with drag-and-drop functionality
+- **Chat history** with session management
+- **Export capabilities** (JSON, TXT formats)
+- **User preferences** for customization
+- **Responsive design** for mobile and desktop
+
+### 📁 File Manager
+- **Web-based file browser** with grid and list views
+- **Upload/download** with progress tracking
+- **Folder management** (create, rename, move, delete)
+- **Search functionality** across files and folders
+- **Drag-and-drop** file operations
+- **Context menus** for file actions
+- **Breadcrumb navigation**
+
+### 🔧 Backend API
+- **FastAPI-based REST API** with automatic documentation
+- **WebSocket support** for real-time chat
+- **File upload/processing** endpoints
+- **Health monitoring** and metrics
+- **Redis integration** for queue management
+- **Structured logging** with detailed request tracking
+
+## 📁 Project Structure
 
 ```
-├── app/
-│   ├── api/                    # API layer
-│   │   ├── routes/            # Route handlers
-│   │   └── dependencies/      # FastAPI dependencies
-│   ├── core/                  # Core configuration
-│   │   ├── config.py         # Settings and configuration
-│   │   └── logging.py        # Logging configuration
-│   ├── models/               # Pydantic models
-│   │   ├── requests/         # Request models
-│   │   ├── responses/        # Response models
-│   │   └── schemas/          # Database schemas (future)
-│   ├── services/             # Business logic layer
-│   │   ├── document_converter_service.py
-│   │   ├── typesense_indexer_service.py
-│   │   ├── qdrant_indexer_service.py
-│   │   └── document_sync_service.py
-│   ├── workers/              # Background workers
-│   │   ├── document_converter_worker.py
-│   │   ├── typesense_indexer_worker.py
-│   │   ├── qdrant_indexer_worker.py
-│   │   └── document_sync_worker.py
-│   ├── utils/                # Utility functions
-│   │   ├── queue_manager.py  # BullMQ queue management
-│   │   └── exceptions.py     # Custom exceptions
-│   └── main.py               # FastAPI application entry point
-├── scripts/                  # Deployment and utility scripts
-├── tests/                    # Test files
-├── requirements.txt          # Python dependencies
-├── environment.yml           # Conda environment file
-├── .env.example             # Environment variables example
-├── .gitignore               # Git ignore rules
-└── README.md                # This file
+agentic-rag/
+├── app/                          # Backend FastAPI application
+│   ├── api/routes/              # API route handlers
+│   │   ├── chat_routes.py       # Chat API endpoints
+│   │   ├── document_routes.py   # Document processing
+│   │   ├── file_manager.py      # File management API
+│   │   └── file_routes.py       # File upload/download
+│   ├── core/                    # Core configuration
+│   ├── models/                  # Pydantic models
+│   └── main.py                  # Main FastAPI application
+├── static/modules/              # Frontend modules
+│   ├── chat/                    # AI Chat Interface
+│   │   ├── chat.html           # Main chat UI
+│   │   ├── css/chat.css        # Claude-inspired styling
+│   │   └── js/                 # Modular JavaScript
+│   │       ├── chat-app.js     # Main application coordinator
+│   │       ├── chat-websocket.js # WebSocket management
+│   │       ├── chat-artifacts.js # Artifacts system
+│   │       ├── chat-messages.js # Message handling
+│   │       └── chat-service.js  # API communication
+│   ├── dashboard/               # Main Dashboard
+│   │   ├── dashboard.html      # AdminLTE dashboard
+│   │   ├── css/dashboard.css   # Dashboard styling
+│   │   └── js/dashboard.js     # Dashboard functionality
+│   └── file-manager/           # File Manager
+│       ├── index.html          # File browser UI
+│       ├── css/                # File manager styles
+│       └── js/                 # File management logic
+└── requirements.txt            # Python dependencies
 ```
 
-## Prerequisites
+## 🛠️ Installation & Setup
 
-- Python 3.11+
-- Redis 6.0+
-- Node.js 18+ (for BullMQ)
+### Prerequisites
+- Python 3.8+
+- Redis (for queue management)
+- Node.js (optional, for development)
 
-## Installation
+### Installation
 
-### Using Conda (Recommended)
+1. **Clone the repository**
+   ```bash
+   git clone <repository-url>
+   cd agentic-rag
+   ```
 
-```bash
-# Create conda environment
-conda env create -f environment.yml
-conda activate document-processing-api
+2. **Install Python dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
 
-# Install BullMQ
-npm install bullmq
-```
+3. **Start Redis server**
+   ```bash
+   redis-server
+   ```
 
-### Using venv
+4. **Run the application**
+   ```bash
+   python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+   ```
 
-```bash
-# Create virtual environment
-python -m venv venv
-source venv/bin/activate  # On Windows: venv\Scripts\activate
+5. **Access the application**
+   - Dashboard: http://localhost:8000/
+   - Chat Interface: http://localhost:8000/chat
+   - File Manager: http://localhost:8000/file-manager
+   - API Documentation: http://localhost:8000/docs
 
-# Install dependencies
-pip install -r requirements.txt
+## 💻 Usage
 
-# Install BullMQ
-npm install bullmq
-```
+### Dashboard
+1. Navigate to http://localhost:8000/
+2. Monitor system health and metrics
+3. Use the sidebar to switch between modules
+4. View real-time API status and file storage usage
 
-## Configuration
+### AI Chat
+1. Click "AI Chat" in the dashboard or visit http://localhost:8000/chat
+2. Type messages in the input field at the bottom
+3. Use suggestion cards for quick interactions
+4. Upload files by clicking the attachment button or dragging files
+5. View generated artifacts (code, diagrams) in the sidebar
+6. Export chat history using the history button
 
-1. Copy the environment file:
-```bash
-cp .env.example .env
-```
+### File Manager
+1. Click "File Manager" in the dashboard or visit http://localhost:8000/file-manager
+2. Browse files and folders using the grid or list view
+3. Upload files by clicking "Upload" or dragging files to the interface
+4. Create folders, rename files, and manage your documents
+5. Use the search bar to find specific files
 
-2. Update the `.env` file with your configuration:
-```env
-# Redis Configuration
-REDIS_HOST=localhost
-REDIS_PORT=6379
-REDIS_PASSWORD=
-REDIS_DB=0
+## 🔌 API Endpoints
 
-# API Configuration
-API_HOST=0.0.0.0
-API_PORT=8000
-DEBUG=true
-LOG_LEVEL=INFO
+### Chat API
+- `GET /api/v1/chat/preferences` - Get user preferences
+- `PUT /api/v1/chat/preferences` - Update user preferences
+- `POST /api/v1/chat/message` - Send chat message (HTTP fallback)
+- `GET /api/v1/chat/history` - Get chat history
+- `POST /api/v1/chat/sessions` - Save chat session
+- `GET /api/v1/chat/sessions` - List chat sessions
+- `WS /ws/chat` - WebSocket endpoint for real-time chat
 
-# Queue Configuration
-QUEUE_PREFIX=document_processing
-MAX_RETRIES=3
-JOB_TIMEOUT=300
+### File Management API
+- `GET /api/v1/file-manager/` - List files and folders
+- `POST /api/v1/file-manager/upload` - Upload files
+- `POST /api/v1/file-manager/folder` - Create folder
+- `DELETE /api/v1/file-manager/item` - Delete files/folders
+- `PUT /api/v1/file-manager/rename` - Rename items
+- `PUT /api/v1/file-manager/move` - Move items
 
-# External Services
-TYPESENSE_HOST=localhost
-TYPESENSE_PORT=8108
-TYPESENSE_API_KEY=your_api_key
+### System API
+- `GET /health` - System health check
+- `GET /api` - API information
 
-QDRANT_HOST=localhost
-QDRANT_PORT=6333
-QDRANT_API_KEY=your_api_key
-```
+## 🏗️ Architecture
 
-## Running the Application
+### Modular Frontend Design
+- **Separation of concerns** with dedicated modules for each feature
+- **Component-based architecture** for easy maintenance
+- **Event-driven communication** between modules
+- **Responsive design** with Bootstrap 5
 
-### Start Redis
-```bash
-# Using Docker
-docker run -d -p 6379:6379 redis:latest
+### Backend Architecture
+- **FastAPI** for high-performance async API
+- **Pydantic** for data validation and serialization
+- **WebSocket** support for real-time communication
+- **Redis** for queue management and caching
+- **Structured logging** for monitoring and debugging
 
-# Or using local Redis installation
-redis-server
-```
+### Real-time Features
+- **WebSocket communication** for instant chat responses
+- **Live dashboard updates** with health monitoring
+- **File upload progress** tracking
+- **Connection status** indicators
 
-### Start the API Server
-```bash
-# Development
-uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+## 🔧 Customization
 
-# Production
-uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 4
-```
+### Adding New Chat Features
+1. Extend `chat-service.js` for new API endpoints
+2. Add message types in `chat-websocket.js`
+3. Implement UI components in `chat-app.js`
+4. Add backend endpoints in `chat_routes.py`
 
-### Start the Workers
-```bash
-# Start all workers (in separate terminals)
-python -m app.workers.document_converter_worker
-python -m app.workers.typesense_indexer_worker
-python -m app.workers.qdrant_indexer_worker
-python -m app.workers.document_sync_worker
-```
+### Extending File Manager
+1. Add new file operations in `file-operations.js`
+2. Implement backend handlers in `file_manager.py`
+3. Update UI components in `ui-components.js`
 
-## API Endpoints
+### Dashboard Customization
+1. Modify `dashboard.css` for styling
+2. Add new widgets in `dashboard.js`
+3. Extend health monitoring in `main.py`
 
-### Document Conversion
-```http
-POST /api/v1/documents/convert
-Content-Type: application/json
+## 🚧 Development Status
 
-{
-  "document_id": "doc_123",
-  "source_path": "/path/to/document.pdf",
-  "output_path": "/path/to/output.md",
-  "conversion_options": {
-    "preserve_formatting": true,
-    "extract_images": false
-  }
-}
-```
+### ✅ Completed Features
+- Complete chat interface with artifacts
+- Real-time WebSocket communication
+- File upload and management
+- Dashboard with system monitoring
+- Modular frontend architecture
+- Backend API with documentation
+- Health monitoring and logging
 
-### Typesense Indexing
-```http
-POST /api/v1/documents/index/typesense
-Content-Type: application/json
+### 🔄 Ready for LLM Integration
+The system is **production-ready** and designed for easy LLM integration:
 
-{
-  "document_id": "doc_123",
-  "content": "Document content to index",
-  "metadata": {
-    "title": "Document Title",
-    "author": "Author Name",
-    "tags": ["tag1", "tag2"]
-  },
-  "collection_name": "documents"
-}
-```
+1. **Replace mock responses** in `generate_ai_response()` function
+2. **Add your LLM service** (OpenAI, Anthropic, local models, etc.)
+3. **Customize artifact types** based on your LLM capabilities
+4. **Configure authentication** if needed
 
-### Qdrant Indexing
-```http
-POST /api/v1/documents/index/qdrant
-Content-Type: application/json
+### 🔮 Future Enhancements
+- Voice input integration
+- Advanced file processing (OCR, document parsing)
+- User authentication and multi-tenancy
+- Plugin system for custom artifacts
+- Advanced search with semantic similarity
+- Real-time collaboration features
 
-{
-  "document_id": "doc_123",
-  "content": "Document content to vectorize",
-  "metadata": {
-    "title": "Document Title",
-    "source": "upload"
-  },
-  "collection_name": "document_vectors"
-}
-```
+## 📝 License
 
-### Document Synchronization
-```http
-POST /api/v1/documents/sync
-Content-Type: application/json
+This project is licensed under the MIT License - see the LICENSE file for details.
 
-{
-  "source_document_id": "doc_123",
-  "target_systems": ["typesense", "qdrant"],
-  "sync_options": {
-    "force_update": false,
-    "batch_size": 100
-  }
-}
-```
-
-## Development
-
-### Code Style
-This project follows:
-- **PEP 8** for Python code style
-- **Black** for code formatting
-- **isort** for import sorting
-- **mypy** for type checking
-
-```bash
-# Format code
-black app/
-isort app/
-
-# Type checking
-mypy app/
-
-# Linting
-flake8 app/
-```
-
-### Testing
-```bash
-# Run tests
-pytest
-
-# Run tests with coverage
-pytest --cov=app tests/
-
-# Run specific test file
-pytest tests/test_document_converter_service.py
-```
-
-### Adding New Services
-
-1. Create service in `app/services/`
-2. Create corresponding worker in `app/workers/`
-3. Add request/response models in `app/models/`
-4. Create route in `app/api/routes/`
-5. Add tests in `tests/`
-
-## Monitoring
-
-### Queue Monitoring
-The application includes built-in queue monitoring endpoints:
-
-```http
-GET /api/v1/queues/status
-GET /api/v1/queues/{queue_name}/jobs
-GET /api/v1/queues/{queue_name}/stats
-```
-
-### Health Checks
-```http
-GET /health
-GET /health/redis
-```
-
-## Deployment
-
-### Docker
-```bash
-# Build image
-docker build -t document-processing-api .
-
-# Run container
-docker run -p 8000:8000 document-processing-api
-```
-
-### Production Considerations
-- Use a process manager like **Supervisor** or **systemd** for workers
-- Set up **Redis Cluster** for high availability
-- Use **nginx** as a reverse proxy
-- Implement proper logging and monitoring
-- Set up **Redis persistence** for job durability
-
-## Contributing
+## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Add tests
-5. Run the test suite
-6. Submit a pull request
+4. Add tests if applicable
+5. Submit a pull request
 
-## License
+## 📞 Support
 
-MIT License - see LICENSE file for details. 
+For questions, issues, or feature requests, please open an issue on GitHub.
+
+---
+
+**Built with ❤️ using FastAPI, WebSockets, and modern web technologies.** 

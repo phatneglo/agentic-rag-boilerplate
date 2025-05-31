@@ -29,14 +29,14 @@ class Dashboard {
             this.showSection('dashboard');
         });
 
+        document.getElementById('chat-nav').addEventListener('click', (e) => {
+            e.preventDefault();
+            this.showSection('chat');
+        });
+
         document.getElementById('file-manager-nav').addEventListener('click', (e) => {
             e.preventDefault();
             this.showSection('file-manager');
-        });
-
-        document.getElementById('api-docs-nav').addEventListener('click', (e) => {
-            e.preventDefault();
-            this.showSection('api-docs');
         });
 
         // Top navbar links
@@ -55,35 +55,49 @@ class Dashboard {
         });
     }
 
-    showSection(sectionName) {
-        // Update active navigation
+    showSection(section) {
+        // Hide all sections
+        document.getElementById('dashboard-content').classList.add('d-none');
+        document.getElementById('chat-content').classList.add('d-none');
+        document.getElementById('file-manager-content').classList.add('d-none');
+        
+        // Update navigation active states
         document.querySelectorAll('.nav-link').forEach(link => {
             link.classList.remove('active');
         });
-
-        // Hide all content sections
-        document.querySelectorAll('.content').forEach(content => {
-            content.classList.add('d-none');
-        });
-
-        // Show selected section
-        document.getElementById(`${sectionName}-content`).classList.remove('d-none');
         
-        // Update navigation state
-        document.getElementById(`${sectionName}-nav`).classList.add('active');
-        
-        this.currentSection = sectionName;
-
-        // Special handling for file manager
-        if (sectionName === 'file-manager') {
-            this.loadFileManager();
+        // Show selected section and update nav
+        switch(section) {
+            case 'dashboard':
+                document.getElementById('dashboard-content').classList.remove('d-none');
+                document.getElementById('dashboard-nav').classList.add('active');
+                break;
+            case 'chat':
+                document.getElementById('chat-content').classList.remove('d-none');
+                document.getElementById('chat-nav').classList.add('active');
+                this.loadChat();
+                break;
+            case 'file-manager':
+                document.getElementById('file-manager-content').classList.remove('d-none');
+                document.getElementById('file-manager-nav').classList.add('active');
+                this.loadFileManager();
+                break;
         }
+        
+        this.currentSection = section;
     }
 
     loadFileManager() {
         const iframe = document.getElementById('file-manager-frame');
         if (iframe && !iframe.src.includes('index.html')) {
-            iframe.src = '/static/index.html';
+            iframe.src = '/static/modules/file-manager/index.html';
+        }
+    }
+
+    loadChat() {
+        const iframe = document.getElementById('chat-frame');
+        if (iframe && !iframe.src.includes('chat')) {
+            iframe.src = '/chat';
         }
     }
 
@@ -152,8 +166,8 @@ class Dashboard {
     }
 
     updateDashboardMetrics(healthData, responseTime) {
-        // Update API response time
-        const responseTimeElement = document.getElementById('api-response-time');
+        // Update response time
+        const responseTimeElement = document.getElementById('response-time');
         if (responseTime !== null) {
             responseTimeElement.textContent = `${responseTime}ms`;
             responseTimeElement.classList.remove('pulse');
@@ -164,13 +178,37 @@ class Dashboard {
 
         // Update other metrics from health data
         if (healthData) {
-            this.updateMetric('files-count', healthData.file_count || '--');
-            this.updateMetric('storage-usage', this.formatBytes(healthData.storage_used || 0));
-            this.updateMetric('system-uptime', this.formatUptime(healthData.uptime || 0));
+            this.updateMetric('file-count', healthData.file_count || '--');
+            this.updateMetric('storage-used', this.formatBytes(healthData.storage_used || 0));
+            // Update system uptime in health details instead
+            const healthDetails = document.getElementById('health-details');
+            if (healthDetails) {
+                healthDetails.innerHTML = `
+                    <div class="row">
+                        <div class="col-sm-6">
+                            <strong>Uptime:</strong> ${this.formatUptime(healthData.uptime || 0)}
+                        </div>
+                        <div class="col-sm-6">
+                            <strong>Status:</strong> <span class="badge badge-success">Online</span>
+                        </div>
+                    </div>
+                    <div class="row mt-2">
+                        <div class="col-sm-6">
+                            <strong>Files:</strong> ${healthData.file_count || 0}
+                        </div>
+                        <div class="col-sm-6">
+                            <strong>Storage:</strong> ${this.formatBytes(healthData.storage_used || 0)}
+                        </div>
+                    </div>
+                `;
+            }
         } else {
-            this.updateMetric('files-count', '--');
-            this.updateMetric('storage-usage', '--');
-            this.updateMetric('system-uptime', '--');
+            this.updateMetric('file-count', '--');
+            this.updateMetric('storage-used', '--');
+            const healthDetails = document.getElementById('health-details');
+            if (healthDetails) {
+                healthDetails.innerHTML = '<p class="text-danger">Unable to fetch health information</p>';
+            }
         }
     }
 
@@ -326,6 +364,11 @@ class Dashboard {
     async refresh() {
         await this.checkAPIHealth();
         await this.updateRecentActivity();
+    }
+
+    // Method to manually refresh health (for button click)
+    async refreshHealth() {
+        await this.checkAPIHealth();
     }
 
     // Cleanup method

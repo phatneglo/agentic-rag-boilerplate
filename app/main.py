@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any
 
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status, WebSocket
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
@@ -19,6 +19,7 @@ from app.core.logging_config import configure_logging, get_logger, log_request_r
 from app.api.routes.document_routes import router as document_router
 from app.api.routes.file_routes import upload_router
 from app.api.routes.file_manager import router as file_manager_router
+from app.api.routes.chat_routes import router as chat_router
 from app.utils.queue_manager import queue_manager
 from app.models.responses.document_responses import HealthCheckResponse, ErrorResponse
 from app import __version__
@@ -351,6 +352,49 @@ app.include_router(
     prefix=f"/api/{settings.api_version}"
 )
 
+app.include_router(
+    chat_router,
+    prefix=f"/api/{settings.api_version}/chat",
+    tags=["chat"]
+)
+
+# Include WebSocket directly since it needs to be at root level
+from app.api.routes.chat_routes import manager
+
+@app.websocket("/ws/chat")
+async def websocket_endpoint(websocket: WebSocket):
+    """WebSocket endpoint for chat"""
+    await manager.connect(websocket)
+    try:
+        while True:
+            data = await websocket.receive_text()
+            # Handle WebSocket data - delegated to chat routes
+            import json
+            import asyncio
+            from app.api.routes.chat_routes import generate_ai_response
+            
+            try:
+                message_data = json.loads(data)
+                logger.info("Received WebSocket message", message_type=message_data.get("type"))
+                
+                if message_data.get("type") == "chat_message":
+                    # Process chat message and generate AI response
+                    response = await generate_ai_response(message_data.get("content", ""))
+                    await manager.send_personal_message(json.dumps(response), websocket)
+                elif message_data.get("type") == "ping":
+                    # Respond to ping with pong
+                    import time
+                    pong_response = {"type": "pong", "timestamp": time.time()}
+                    await manager.send_personal_message(json.dumps(pong_response), websocket)
+                    
+            except json.JSONDecodeError:
+                logger.error("Invalid JSON received from WebSocket")
+            except Exception as e:
+                logger.error("Error processing WebSocket message", error=str(e))
+                
+    except Exception:  # WebSocketDisconnect
+        manager.disconnect(websocket)
+
 # Mount static files for file manager UI
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -363,7 +407,7 @@ app.mount("/static", StaticFiles(directory="static"), name="static")
 )
 async def dashboard_ui():
     """Serve the main dashboard interface."""
-    return FileResponse("static/dashboard.html")
+    return FileResponse("static/modules/dashboard/dashboard.html")
 
 # File Manager UI endpoint
 @app.get(
@@ -374,7 +418,18 @@ async def dashboard_ui():
 )
 async def file_manager_ui():
     """Serve the file manager web interface."""
-    return FileResponse("static/index.html")
+    return FileResponse("static/modules/file-manager/index.html")
+
+# Chat UI endpoint
+@app.get(
+    "/chat",
+    tags=["chat"],
+    summary="AI Chat Interface",
+    description="Serve the AI chat web interface"
+)
+async def chat_ui():
+    """Serve the AI chat web interface."""
+    return FileResponse("static/modules/chat/chat.html")
 
 # API Information endpoint
 @app.get(
@@ -419,6 +474,10 @@ async def api_info() -> Dict[str, Any]:
                 "move": f"/api/{settings.api_version}/file-manager/move",
                 "search": f"/api/{settings.api_version}/file-manager/search",
                 "info": f"/api/{settings.api_version}/file-manager/info"
+            },
+            "chat": {
+                "ui": "/chat",
+                "api": f"/api/{settings.api_version}/chat"
             }
         }
     }

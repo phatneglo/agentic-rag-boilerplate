@@ -21,6 +21,9 @@ class Settings(BaseSettings):
     debug: bool = Field(default=False, env="DEBUG")
     reload: bool = Field(default=False, env="RELOAD")
     
+    # Database Configuration
+    database_url: Optional[str] = Field(default=None, env="DATABASE_URL")
+    
     # Redis Configuration
     redis_host: str = Field(default="localhost", env="REDIS_HOST")
     redis_port: int = Field(default=6379, env="REDIS_PORT")
@@ -46,6 +49,35 @@ class Settings(BaseSettings):
     qdrant_api_key: str = Field(default="", env="QDRANT_API_KEY")
     qdrant_protocol: str = Field(default="http", env="QDRANT_PROTOCOL")
     
+    # Service URLs
+    document_service_url: str = Field(default="http://localhost:8001", env="DOCUMENT_SERVICE_URL")
+    typesense_service_url: str = Field(default="http://localhost:8002", env="TYPESENSE_SERVICE_URL")
+    qdrant_service_url: str = Field(default="http://localhost:8003", env="QDRANT_SERVICE_URL")
+    
+    # External API Keys
+    openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
+    anthropic_api_key: str = Field(default="", env="ANTHROPIC_API_KEY")
+    
+    # Cache Configuration
+    cache_ttl: int = Field(default=3600, env="CACHE_TTL")
+    cache_max_size: int = Field(default=1000, env="CACHE_MAX_SIZE")
+    
+    # Email Configuration
+    smtp_host: str = Field(default="smtp.gmail.com", env="SMTP_HOST")
+    smtp_port: int = Field(default=587, env="SMTP_PORT")
+    smtp_username: str = Field(default="", env="SMTP_USERNAME")
+    smtp_password: str = Field(default="", env="SMTP_PASSWORD")
+    email_from: str = Field(default="", env="EMAIL_FROM")
+    
+    # Webhook Configuration
+    webhook_secret: str = Field(default="", env="WEBHOOK_SECRET")
+    
+    # Feature Flags
+    enable_document_conversion: bool = Field(default=True, env="ENABLE_DOCUMENT_CONVERSION")
+    enable_vector_search: bool = Field(default=True, env="ENABLE_VECTOR_SEARCH")
+    enable_typesense_indexing: bool = Field(default=True, env="ENABLE_TYPESENSE_INDEXING")
+    enable_qdrant_indexing: bool = Field(default=True, env="ENABLE_QDRANT_INDEXING")
+    
     # Document Processing
     upload_dir: str = Field(default="./uploads", env="UPLOAD_DIR")
     processed_dir: str = Field(default="./processed", env="PROCESSED_DIR")
@@ -65,12 +97,28 @@ class Settings(BaseSettings):
     # Security
     secret_key: str = Field(default="your-secret-key-here", env="SECRET_KEY")
     access_token_expire_minutes: int = Field(default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES")
+    cors_origins: str = Field(default="http://localhost:3000,http://localhost:8000", env="CORS_ORIGINS")
+    
+    # JWT Authentication Configuration
+    jwt_secret_key: str = Field(default="your-super-secret-jwt-key-change-this-in-production", env="JWT_SECRET_KEY")
+    jwt_algorithm: str = Field(default="HS256", env="JWT_ALGORITHM")
+    jwt_expiration_hours: int = Field(default=24, env="JWT_EXPIRATION_HOURS")
+    
+    # Rate Limiting
+    rate_limit_requests: int = Field(default=100, env="RATE_LIMIT_REQUESTS")
+    rate_limit_window: int = Field(default=60, env="RATE_LIMIT_WINDOW")
+    
+    # Background Tasks
+    celery_broker_url: str = Field(default="redis://localhost:6379/1", env="CELERY_BROKER_URL")
+    celery_result_backend: str = Field(default="redis://localhost:6379/1", env="CELERY_RESULT_BACKEND")
     
     # Monitoring and Logging
     enable_metrics: bool = Field(default=True, env="ENABLE_METRICS")
     metrics_port: int = Field(default=9090, env="METRICS_PORT")
     log_format: str = Field(default="json", env="LOG_FORMAT")
     log_file: str = Field(default="./logs/app.log", env="LOG_FILE")
+    sentry_dsn: Optional[str] = Field(default=None, env="SENTRY_DSN")
+    metrics_enabled: bool = Field(default=True, env="METRICS_ENABLED")
     
     # Worker Configuration
     worker_concurrency: int = Field(default=2, env="WORKER_CONCURRENCY")
@@ -79,6 +127,13 @@ class Settings(BaseSettings):
     
     # Development
     workers: int = Field(default=1, env="WORKERS")
+    
+    # Testing
+    test_database_url: Optional[str] = Field(default=None, env="TEST_DATABASE_URL")
+    
+    # File Upload Configuration
+    max_files_per_request: int = Field(default=10, env="MAX_FILES_PER_REQUEST")
+    allowed_file_types: str = Field(default="pdf,doc,docx,txt,md,jpg,jpeg,png,gif,csv,xlsx", env="ALLOWED_FILE_TYPES")
     
     # Object Storage Configuration
     object_storage_provider: str = Field(default="s3", env="OBJECT_STORAGE_PROVIDER")
@@ -91,7 +146,8 @@ class Settings(BaseSettings):
     
     # File Upload Configuration (legacy - keeping for backward compatibility)
     upload_folder_structure: str = Field(default="year-month-day", env="UPLOAD_FOLDER_STRUCTURE")
-    
+    file_manager_base_path: str = Field(default="./file_storage", env="FILE_MANAGER_BASE_PATH")
+
     @validator("redis_url", pre=True, always=True)
     def build_redis_url(cls, v, values):
         """Build Redis URL if not provided."""
@@ -119,6 +175,20 @@ class Settings(BaseSettings):
         """Parse allowed file extensions into a list."""
         if isinstance(v, str):
             return v  # Keep as string, will be parsed in property
+        return v
+    
+    @validator("cors_origins")
+    def parse_cors_origins(cls, v):
+        """Parse CORS origins into a list."""
+        if isinstance(v, str):
+            return [origin.strip() for origin in v.split(",")]
+        return v
+    
+    @validator("allowed_file_types")
+    def parse_allowed_file_types(cls, v):
+        """Parse allowed file types into a list."""
+        if isinstance(v, str):
+            return [file_type.strip() for file_type in v.split(",")]
         return v
     
     @property

@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chat Test</title>
+</head>
+<body>
+    <h1>Chat Module Test</h1>
+    <div id="test-results"></div>
+    
+    <!-- Load chat modules in the same order as the main chat.html -->
+    <script src="/static/modules/chat/js/chat-websocket.js"></script>
+    <script src="/static/modules/chat/js/chat-artifacts.js"></script>
+    <script src="/static/modules/chat/js/chat-messages.js"></script>
+    <script src="/static/modules/chat/js/chat-service.js"></script>
+    <script src="/static/modules/chat/js/chat-app.js"></script>
+    
+    <script>
+        // Test that all modules are loaded
+        setTimeout(() => {
+            const results = document.getElementById('test-results');
+            const tests = [
+                { name: 'ChatWebSocket class', condition: typeof window.ChatWebSocket === 'function' },
+                { name: 'chatMessages instance', condition: window.chatMessages && typeof window.chatMessages.addUserMessage === 'function' },
+                { name: 'chatArtifacts instance', condition: window.chatArtifacts && typeof window.chatArtifacts.createArtifact === 'function' },
+                { name: 'chatService instance', condition: window.chatService && typeof window.chatService.sendMessage === 'function' },
+                { name: 'chatApp instance', condition: window.chatApp && typeof window.chatApp.sendMessage === 'function' }
+            ];
+            
+            let html = '<h2>Module Test Results:</h2><ul>';
+            let allPassed = true;
+            
+            tests.forEach(test => {
+                const status = test.condition ? '✅ PASS' : '❌ FAIL';
+                html += `<li>${test.name}: ${status}</li>`;
+                if (!test.condition) allPassed = false;
+            });
+            
+            html += '</ul>';
+            html += allPassed ? '<h3 style="color: green;">All tests passed! 🎉</h3>' : '<h3 style="color: red;">Some tests failed ❌</h3>';
+            
+            results.innerHTML = html;
+            
+            if (allPassed) {
+                console.log('All chat modules loaded successfully!');
+            } else {
+                console.error('Some chat modules failed to load');
+            }
+        }, 1000);
+    </script>
+</body>
+</html> 

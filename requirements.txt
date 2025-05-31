@@ -78,4 +78,29 @@ boto3==1.35.95
 botocore==1.35.95
 
 # Additional utilities
-aiofiles==24.1.0 
+aiofiles==24.1.0
+
+# LangGraph and Agent dependencies
+langgraph==0.3.28
+langgraph-api==0.1.9
+langchain-openai==0.2.12
+langchain-core==0.3.30
+langchain-community==0.3.30
+
+# OpenAI API
+openai==1.57.2
+
+# Agent utilities
+pydantic>=2.0
+typing-extensions
+uuid
+
+# Additional dependencies for artifacts
+matplotlib>=3.7.0
+plotly>=5.17.0
+pandas>=2.0.0
+numpy>=1.24.0
+pillow>=10.0.0
+
+# WebSocket support (if not already present)
+websockets>=12.0 

@@ -22,6 +22,8 @@ class ChatApp {
         this.currentFiles = [];
         this.isConnected = false;
         this.isTyping = false;
+        this.isGenerating = false;
+        this.currentRequestId = null;
         
         this.init();
     }
@@ -30,36 +32,17 @@ class ChatApp {
      * Initialize the chat application
      */
     async init() {
-        console.log('Initializing chat application...');
+        console.log('Initializing ChatApp...');
         
         // Wait for dependencies to be available
         await this.waitForDependencies();
         
-        // Initialize managers
-        this.wsManager = new ChatWebSocket();
-        this.messagesManager = window.chatMessages;
-        this.artifactsManager = window.chatArtifacts;
-        this.serviceManager = window.chatService;
-        
-        if (!this.messagesManager || !this.artifactsManager || !this.serviceManager) {
-            console.error('Failed to initialize chat dependencies');
-            this.showNotification('Failed to initialize chat interface', 'error');
-            return;
-        }
-        
-        // Get UI elements
-        this.initializeUIElements();
-        
-        // Set up event listeners
+        // Initialize modules in order
+        this.initializeComponents();
         this.setupEventListeners();
+        this.setupStateManagement();
         
-        // Connect WebSocket
-        this.connectWebSocket();
-        
-        // Load user preferences
-        await this.loadUserPreferences();
-        
-        console.log('Chat application initialized successfully');
+        console.log('ChatApp initialized successfully');
     }
 
     /**
@@ -88,6 +71,29 @@ class ChatApp {
     }
 
     /**
+     * Initialize components and dependencies
+     */
+    initializeComponents() {
+        // Initialize managers
+        this.wsManager = new ChatWebSocket();
+        this.messagesManager = window.chatMessages;
+        this.artifactsManager = window.chatArtifacts;
+        this.serviceManager = window.chatService;
+        
+        if (!this.messagesManager || !this.artifactsManager || !this.serviceManager) {
+            console.error('Failed to initialize chat dependencies');
+            this.showNotification('Failed to initialize chat interface', 'error');
+            return;
+        }
+        
+        // Get UI elements
+        this.initializeUIElements();
+        
+        // Connect WebSocket
+        this.connectWebSocket();
+    }
+
+    /**
      * Initialize UI elements
      */
     initializeUIElements() {
@@ -98,133 +104,106 @@ class ChatApp {
         this.uploadArea = document.getElementById('uploadArea');
         this.uploadFiles = document.getElementById('uploadFiles');
         
-        // Status indicator
-        this.statusIndicator = document.querySelector('.status-indicator');
+        if (!this.messageInput || !this.sendBtn) {
+            console.error('Required UI elements not found');
+            return false;
+        }
+        
+        return true;
     }
 
     /**
      * Set up event listeners
      */
     setupEventListeners() {
-        // Message input events
-        if (this.messageInput) {
-            this.messageInput.addEventListener('input', (e) => this.handleInputChange(e));
-            this.messageInput.addEventListener('keydown', (e) => this.handleKeyDown(e));
-            this.messageInput.addEventListener('paste', (e) => this.handlePaste(e));
-        }
-        
         // Send button
         if (this.sendBtn) {
-            this.sendBtn.addEventListener('click', () => this.handleSend());
-        }
-        
-        // Attachment button
-        if (this.attachmentBtn) {
-            this.attachmentBtn.addEventListener('click', () => this.handleAttachment());
-        }
-        
-        // File input (hidden)
-        const hiddenFileInput = document.getElementById('hiddenFileInput');
-        if (hiddenFileInput) {
-            hiddenFileInput.addEventListener('change', (e) => this.handleFileSelection(e));
-        }
-        
-        // New chat button
-        const newChatBtn = document.getElementById('newChatBtn');
-        if (newChatBtn) {
-            newChatBtn.addEventListener('click', () => this.startNewChat());
-        }
-        
-        // History button
-        const historyBtn = document.getElementById('historyBtn');
-        if (historyBtn) {
-            historyBtn.addEventListener('click', () => this.showChatHistory());
-        }
-        
-        // Settings button
-        const settingsBtn = document.getElementById('settingsBtn');
-        if (settingsBtn) {
-            settingsBtn.addEventListener('click', () => this.showSettings());
-        }
-        
-        // Upload modal events
-        this.setupUploadModalEvents();
-        
-        // Drag and drop
-        this.setupDragAndDrop();
-    }
-
-    /**
-     * Set up upload modal events
-     */
-    setupUploadModalEvents() {
-        const uploadZone = document.getElementById('uploadZone');
-        const fileInput = document.getElementById('fileInput');
-        
-        if (uploadZone && fileInput) {
-            uploadZone.addEventListener('click', () => fileInput.click());
-            fileInput.addEventListener('change', (e) => this.handleModalFileSelection(e));
-            
-            // Drag and drop for upload zone
-            uploadZone.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadZone.classList.add('dragover');
-            });
-            
-            uploadZone.addEventListener('dragleave', (e) => {
-                e.preventDefault();
-                uploadZone.classList.remove('dragover');
-            });
-            
-            uploadZone.addEventListener('drop', (e) => {
-                e.preventDefault();
-                uploadZone.classList.remove('dragover');
-                this.handleFileDrop(e);
-            });
-        }
-    }
-
-    /**
-     * Set up drag and drop for main chat area
-     */
-    setupDragAndDrop() {
-        const chatContainer = document.querySelector('.chat-container');
-        
-        if (chatContainer) {
-            chatContainer.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                this.showDropZone();
-            });
-            
-            chatContainer.addEventListener('dragleave', (e) => {
-                e.preventDefault();
-                if (!chatContainer.contains(e.relatedTarget)) {
-                    this.hideDropZone();
+            this.sendBtn.addEventListener('click', () => {
+                if (this.isGenerating) {
+                    this.stopGeneration();
+                } else {
+                    this.sendMessage();
                 }
             });
-            
-            chatContainer.addEventListener('drop', (e) => {
-                e.preventDefault();
-                this.hideDropZone();
-                this.handleFileDrop(e);
+        }
+
+        // Message input
+        if (this.messageInput) {
+            this.messageInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    if (!this.isGenerating) {
+                        this.sendMessage();
+                    }
+                }
+            });
+
+            this.messageInput.addEventListener('input', () => {
+                this.updateCharacterCount();
+                this.adjustTextareaHeight();
             });
         }
+
+        // Attachment button
+        if (this.attachmentBtn) {
+            this.attachmentBtn.addEventListener('click', () => {
+                this.openFileDialog();
+            });
+        }
+
+        // WebSocket events - using the correct event system  
+        if (this.wsManager) {
+            this.wsManager.on('connected', () => {
+                this.isConnected = true;
+                this.updateConnectionStatus(true);
+            });
+
+            this.wsManager.on('disconnected', () => {
+                this.isConnected = false;
+                this.updateConnectionStatus(false);
+            });
+
+            this.wsManager.on('chat_response', (data) => {
+                this.handleChatResponse(data);
+            });
+
+            this.wsManager.on('error', (error) => {
+                console.error('WebSocket error:', error);
+                this.showError('Connection error. Please try again.');
+            });
+        }
+
+        // Hidden file input event handler
+        const hiddenFileInput = document.getElementById('hiddenFileInput');
+        if (hiddenFileInput) {
+            hiddenFileInput.addEventListener('change', (e) => {
+                this.handleFileSelection(e);
+            });
+        }
+
+        // Global events
+        window.addEventListener('beforeunload', () => {
+            if (this.wsManager) {
+                this.wsManager.close();
+            }
+        });
+    }
+
+    /**
+     * Setup state management
+     */
+    setupStateManagement() {
+        this.isGenerating = false;
+        this.currentRequestId = null;
     }
 
     /**
      * Connect WebSocket
      */
     connectWebSocket() {
-        // Set up WebSocket event listeners
-        this.wsManager.on('connected', () => this.handleWSConnected());
-        this.wsManager.on('disconnected', () => this.handleWSDisconnected());
-        this.wsManager.on('chat_response', (data) => this.handleChatResponse(data));
-        this.wsManager.on('typing_start', () => this.handleTypingStart());
-        this.wsManager.on('typing_stop', () => this.handleTypingStop());
-        this.wsManager.on('error', (error) => this.handleWSError(error));
-        
-        // Connect
-        this.wsManager.connect();
+        if (this.wsManager) {
+            this.wsManager.connect();
+        }
     }
 
     /**
@@ -232,7 +211,7 @@ class ChatApp {
      */
     handleWSConnected() {
         this.isConnected = true;
-        this.updateConnectionStatus('online');
+        this.updateConnectionStatus(true);
         console.log('Chat connected');
     }
 
@@ -241,7 +220,7 @@ class ChatApp {
      */
     handleWSDisconnected() {
         this.isConnected = false;
-        this.updateConnectionStatus('offline');
+        this.updateConnectionStatus(false);
         console.log('Chat disconnected');
     }
 
@@ -249,11 +228,23 @@ class ChatApp {
      * Handle chat response from AI
      */
     handleChatResponse(data) {
-        // Hide typing indicator
-        this.messagesManager.hideTypingIndicator();
+        // Stop generation state
+        this.stopGeneration();
         
-        // Add AI message
+        // Add AI response
         this.messagesManager.addAIMessage(data.content, data.artifacts || []);
+        
+        // Show artifacts if available
+        if (data.artifacts && data.artifacts.length > 0) {
+            // Auto-show first artifact
+            setTimeout(() => {
+                const firstArtifact = data.artifacts[0];
+                if (firstArtifact && window.chatArtifacts) {
+                    const artifact = window.chatArtifacts.createArtifact(firstArtifact);
+                    window.chatArtifacts.showArtifact(artifact.id);
+                }
+            }, 500);
+        }
         
         console.log('Received chat response:', data);
     }
@@ -283,11 +274,18 @@ class ChatApp {
     /**
      * Update connection status indicator
      */
-    updateConnectionStatus(status) {
-        if (this.statusIndicator) {
-            this.statusIndicator.className = `status-indicator ${status}`;
-            const text = this.statusIndicator.querySelector('span') || this.statusIndicator;
-            text.innerHTML = `<i class="fas fa-circle"></i> ${status === 'online' ? 'Online' : 'Offline'}`;
+    updateConnectionStatus(connected) {
+        const statusIndicator = document.querySelector('.status-indicator');
+        const statusText = statusIndicator?.querySelector('span')?.lastChild;
+        
+        if (statusIndicator) {
+            if (connected) {
+                statusIndicator.className = 'status-indicator online';
+                if (statusText) statusText.textContent = ' Online';
+            } else {
+                statusIndicator.className = 'status-indicator offline';
+                if (statusText) statusText.textContent = ' Offline';
+            }
         }
     }
 
@@ -353,67 +351,103 @@ class ChatApp {
      * Auto-resize textarea
      */
     autoResizeTextarea(textarea) {
+        if (!textarea) return;
+        
         textarea.style.height = 'auto';
         textarea.style.height = Math.min(textarea.scrollHeight, 120) + 'px';
     }
 
     /**
-     * Update send button state
+     * Update send button state and appearance
      */
     updateSendButton() {
-        const hasContent = this.messageInput?.value.trim().length > 0;
-        const hasFiles = this.currentFiles.length > 0;
+        if (!this.sendBtn) return;
         
-        if (this.sendBtn) {
-            // Enable send button if there's content or files
-            // Don't block on connection status - let the WebSocket handle fallbacks
+        const icon = this.sendBtn.querySelector('i');
+        if (!icon) return;
+        
+        if (this.isGenerating) {
+            // Change to stop button
+            this.sendBtn.classList.add('btn-stop');
+            this.sendBtn.title = 'Stop Generation';
+            icon.className = 'fas fa-stop';
+            this.sendBtn.disabled = false;
+        } else {
+            // Change to send button
+            this.sendBtn.classList.remove('btn-stop');
+            this.sendBtn.title = 'Send Message';
+            icon.className = 'fas fa-paper-plane';
+            
+            // Enable/disable based on content
+            const hasContent = this.messageInput?.value.trim().length > 0;
+            const hasFiles = this.currentFiles.length > 0;
             this.sendBtn.disabled = !hasContent && !hasFiles;
         }
     }
 
     /**
-     * Handle send message
+     * Send message
      */
-    async handleSend() {
-        const content = this.messageInput?.value.trim();
-        
+    async sendMessage() {
+        if (!this.isConnected) {
+            this.showError('Not connected to chat service. Please wait for connection.');
+            return;
+        }
+
+        const content = this.messageInput.value.trim();
         if (!content && this.currentFiles.length === 0) {
             return;
         }
-        
-        // Always try to send, even if connection status is uncertain
-        // The WebSocket will fallback to mock mode if needed
-        
+
         try {
-            // Prepare attachments
-            let attachments = [];
-            if (this.currentFiles.length > 0) {
-                const uploadResult = await this.serviceManager.uploadFiles(this.currentFiles);
-                attachments = uploadResult.files;
-            }
+            // Start generation state
+            this.startGeneration();
             
             // Add user message
-            this.messagesManager.addUserMessage(content, attachments);
-            
-            // Send to AI service via WebSocket
-            if (this.wsManager) {
-                this.wsManager.sendChatMessage(content, attachments);
-            } else {
-                // Fallback to HTTP endpoint
-                await this.serviceManager.sendMessage(content, attachments);
-            }
+            this.messagesManager.addUserMessage(content, this.currentFiles);
             
             // Clear input
-            this.clearInput();
+            this.messageInput.value = '';
+            this.currentFiles = [];
+            this.updateCharacterCount();
+            this.adjustTextareaHeight();
+            this.hideUploadArea();
             
-            // Show typing indicator
-            setTimeout(() => {
-                this.messagesManager.showTypingIndicator();
-            }, 500);
+            // Send via WebSocket using the correct method
+            this.currentRequestId = this.generateRequestId();
+            this.wsManager.sendChatMessage(content, this.currentFiles);
             
         } catch (error) {
             console.error('Send message error:', error);
-            this.showNotification(`Failed to send message: ${error.message}`, 'error');
+            this.showError('Failed to send message. Please try again.');
+            this.stopGeneration();
+        }
+    }
+
+    /**
+     * Start generation state
+     */
+    startGeneration() {
+        this.isGenerating = true;
+        this.updateSendButton();
+        this.messagesManager.showTypingIndicator();
+    }
+
+    /**
+     * Stop generation
+     */
+    stopGeneration() {
+        this.isGenerating = false;
+        this.currentRequestId = null;
+        this.updateSendButton();
+        this.messagesManager.hideTypingIndicator();
+        
+        // Send stop signal if connected
+        if (this.wsManager && this.isConnected) {
+            this.wsManager.send({
+                type: 'stop_generation',
+                requestId: this.currentRequestId
+            });
         }
     }
 
@@ -470,8 +504,10 @@ class ChatApp {
      */
     addFile(file) {
         try {
-            // Validate file
-            this.serviceManager.validateFile(file);
+            // Basic file validation
+            if (file.size > 10 * 1024 * 1024) { // 10MB limit
+                throw new Error('File size too large (max 10MB)');
+            }
             
             // Add to current files
             this.currentFiles.push(file);
@@ -536,7 +572,13 @@ class ChatApp {
      * Format file size
      */
     formatFileSize(bytes) {
-        return this.serviceManager.formatFileSize(bytes);
+        if (bytes === 0) return '0 Bytes';
+        
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
     }
 
     /**
@@ -661,10 +703,10 @@ class ChatApp {
      * Show notification
      */
     showNotification(message, type = 'info') {
-        // Create toast notification
-        const toast = document.createElement('div');
-        toast.className = `alert alert-${type === 'error' ? 'danger' : type} fade-in`;
-        toast.style.cssText = `
+        // Simple notification implementation
+        const notification = document.createElement('div');
+        notification.className = `alert alert-${type === 'error' ? 'danger' : type} fade-in`;
+        notification.style.cssText = `
             position: fixed;
             top: 20px;
             right: 20px;
@@ -674,13 +716,13 @@ class ChatApp {
             border-radius: 6px;
             box-shadow: 0 4px 12px rgba(0,0,0,0.1);
         `;
-        toast.textContent = message;
+        notification.textContent = message;
         
-        document.body.appendChild(toast);
+        document.body.appendChild(notification);
         
         setTimeout(() => {
-            toast.remove();
-        }, 5000);
+            notification.remove();
+        }, 3000);
     }
 
     /**
@@ -706,13 +748,64 @@ class ChatApp {
     }
 
     /**
-     * Send message (public method for external calls)
+     * Send message (public method for external calls like suggestion cards)
      */
-    sendMessage(content) {
-        if (this.messageInput) {
+    sendMessageFromSuggestion(content) {
+        if (this.messageInput && content) {
             this.messageInput.value = content;
-            this.handleSend();
+            this.updateCharacterCount();
+            this.adjustTextareaHeight();
+            this.sendMessage();
         }
+    }
+
+    /**
+     * Show error notification
+     */
+    showError(message) {
+        this.showNotification(message, 'error');
+    }
+
+    /**
+     * Update character count
+     */
+    updateCharacterCount() {
+        if (this.characterCount) {
+            const length = this.messageInput.value.length;
+            const maxLength = parseInt(this.messageInput.getAttribute('maxlength')) || 8000;
+            this.characterCount.textContent = `${length}/${maxLength}`;
+        }
+    }
+
+    /**
+     * Adjust textarea height
+     */
+    adjustTextareaHeight() {
+        this.autoResizeTextarea(this.messageInput);
+    }
+
+    /**
+     * Hide upload area
+     */
+    hideUploadArea() {
+        this.uploadArea?.classList.add('d-none');
+    }
+
+    /**
+     * Open file dialog
+     */
+    openFileDialog() {
+        const hiddenFileInput = document.getElementById('hiddenFileInput');
+        if (hiddenFileInput) {
+            hiddenFileInput.click();
+        }
+    }
+
+    /**
+     * Generate unique request ID
+     */
+    generateRequestId() {
+        return 'req_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
     }
 }
 

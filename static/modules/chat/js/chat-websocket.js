@@ -124,7 +124,7 @@ class ChatWebSocket {
     }
 
     /**
-     * Generate mock AI responses
+     * Generate mock response based on user message
      */
     generateMockResponse(userMessage) {
         const responses = [
@@ -155,6 +155,41 @@ for i in range(10):
     print(f"F({i}) = {fibonacci(i)}")`,
                     }
                 ]
+            },
+            {
+                type: 'chat_response',
+                content: 'Here\'s a comprehensive guide based on your request:',
+                timestamp: Date.now(),
+                artifacts: [
+                    {
+                        id: 'artifact_' + Date.now(),
+                        type: 'markdown',
+                        title: 'Getting Started Guide',
+                        content: `# Getting Started Guide
+
+## Overview
+This guide will help you understand the basics and get started quickly.
+
+### Key Features
+- **Easy to use**: Simple and intuitive interface
+- **Powerful**: Advanced functionality when you need it
+- **Flexible**: Customizable to your needs
+
+### Quick Start
+1. First, install the required dependencies
+2. Configure your settings
+3. Run the application
+
+\`\`\`bash
+npm install
+npm start
+\`\`\`
+
+> **Note**: Make sure you have Node.js installed before running these commands.
+
+For more information, check the [documentation](https://example.com).`
+                    }
+                ]
             }
         ];
         
@@ -165,23 +200,51 @@ for i in range(10):
             return responses[1]; // Response with code artifact
         }
         
-        if (lowerMessage.includes('diagram') || lowerMessage.includes('mermaid')) {
+        if (lowerMessage.includes('guide') || lowerMessage.includes('markdown') || lowerMessage.includes('documentation')) {
+            return responses[2]; // Response with markdown artifact
+        }
+        
+        if (lowerMessage.includes('diagram') || lowerMessage.includes('mermaid') || lowerMessage.includes('architecture')) {
             return {
                 type: 'chat_response',
-                content: 'I\'ll create a diagram for you based on your request.',
+                content: 'I\'ll create a diagram to visualize this for you.',
                 timestamp: Date.now(),
                 artifacts: [
                     {
                         id: 'artifact_' + Date.now(),
                         type: 'mermaid',
-                        title: 'System Architecture',
+                        title: 'System Architecture Diagram',
                         content: `graph TD
-    A[Client] --> B[Load Balancer]
-    B --> C[Web Server]
-    B --> D[Web Server]
-    C --> E[Database]
-    D --> E[Database]
-    E --> F[Cache]`
+    A[User Interface] --> B[API Gateway]
+    B --> C[Authentication Service]
+    B --> D[Business Logic]
+    C --> E[User Database]
+    D --> F[Main Database]
+    D --> G[Cache Layer]
+    F --> H[Analytics Engine]
+    G --> I[Session Store]`
+                    }
+                ]
+            };
+        }
+        
+        if (lowerMessage.includes('flowchart') || lowerMessage.includes('process') || lowerMessage.includes('workflow')) {
+            return {
+                type: 'chat_response',
+                content: 'Here\'s a flowchart showing the process:',
+                timestamp: Date.now(),
+                artifacts: [
+                    {
+                        id: 'artifact_' + Date.now(),
+                        type: 'mermaid',
+                        title: 'Process Flowchart',
+                        content: `flowchart LR
+    Start([Start]) --> Input[Get User Input]
+    Input --> Process{Process Data}
+    Process -->|Valid| Success[Success]
+    Process -->|Invalid| Error[Show Error]
+    Error --> Input
+    Success --> End([End])`
                     }
                 ]
             };

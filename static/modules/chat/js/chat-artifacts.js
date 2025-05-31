@@ -260,7 +260,7 @@ class ChatArtifacts {
     }
 
     /**
-     * Render Mermaid diagram
+     * Render Mermaid diagram with improved error handling
      */
     async renderMermaidDiagram(artifact) {
         if (!window.mermaid) return;
@@ -270,18 +270,52 @@ class ChatArtifacts {
         
         if (element) {
             try {
-                const { svg } = await mermaid.render(diagramId + '_svg', artifact.content);
+                // Clean and validate the mermaid content
+                let cleanContent = this.cleanMermaidContent(artifact.content);
+                
+                const { svg } = await mermaid.render(diagramId + '_svg', cleanContent);
                 element.innerHTML = svg;
             } catch (error) {
                 console.error('Error rendering Mermaid diagram:', error);
+                
+                // Provide more helpful error message and show the raw content
                 element.innerHTML = `
                     <div class="alert alert-warning">
-                        <i class="fas fa-exclamation-triangle me-2"></i>
-                        Error rendering diagram: ${error.message}
+                        <h6><i class="fas fa-exclamation-triangle me-2"></i>Diagram Rendering Error</h6>
+                        <p><strong>Error:</strong> ${error.message}</p>
+                        <details>
+                            <summary>Show raw diagram code</summary>
+                            <pre style="margin-top: 10px; font-size: 12px;"><code>${this.escapeHtml(artifact.content)}</code></pre>
+                        </details>
+                        <small class="text-muted">
+                            <strong>Tip:</strong> Check the Mermaid syntax. Common issues include missing spaces, invalid characters, or malformed arrows.
+                        </small>
                     </div>
                 `;
             }
         }
+    }
+
+    /**
+     * Clean and validate Mermaid diagram content
+     */
+    cleanMermaidContent(content) {
+        // Remove leading/trailing whitespace
+        let cleaned = content.trim();
+        
+        // Fix common arrow syntax issues
+        cleaned = cleaned.replace(/-->/g, ' --> ');
+        cleaned = cleaned.replace(/--->/g, ' ---> ');
+        cleaned = cleaned.replace(/\|->/g, ' |-> ');
+        cleaned = cleaned.replace(/==/g, ' == ');
+        
+        // Ensure proper spacing around operators
+        cleaned = cleaned.replace(/\s+/g, ' ');
+        
+        // Fix line endings
+        cleaned = cleaned.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+        
+        return cleaned;
     }
 
     /**
@@ -291,6 +325,12 @@ class ChatArtifacts {
         if (this.sidebar) {
             this.sidebar.classList.add('show');
             this.sidebar.classList.add('slide-in-right');
+            
+            // Adjust main chat container
+            const chatContainer = document.querySelector('.chat-messages-container');
+            if (chatContainer) {
+                chatContainer.classList.add('with-sidebar');
+            }
         }
     }
 
@@ -301,6 +341,12 @@ class ChatArtifacts {
         if (this.sidebar) {
             this.sidebar.classList.remove('show');
             this.sidebar.classList.remove('slide-in-right');
+            
+            // Restore main chat container
+            const chatContainer = document.querySelector('.chat-messages-container');
+            if (chatContainer) {
+                chatContainer.classList.remove('with-sidebar');
+            }
         }
         this.currentArtifact = null;
     }
@@ -456,6 +502,7 @@ class ChatArtifacts {
             <div class="artifact-button" onclick="chatArtifacts.showArtifact('${artifact.id}')">
                 <i class="${iconClass}"></i>
                 <span>${artifact.title}</span>
+                <small class="text-muted ms-2">• Click to view</small>
             </div>
         `;
     }
@@ -476,19 +523,54 @@ class ChatArtifacts {
     }
 
     /**
-     * Convert markdown to HTML
+     * Convert markdown to HTML with enhanced processing
      */
     markdownToHtml(markdown) {
         if (window.marked) {
             return marked.parse(markdown);
         }
         
-        // Simple fallback markdown conversion
-        return markdown
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/`(.*?)`/g, '<code>$1</code>')
-            .replace(/\n/g, '<br>');
+        // Enhanced fallback markdown conversion
+        let html = markdown;
+        
+        // Process headers
+        html = html.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+        html = html.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+        html = html.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+        
+        // Process code blocks
+        html = html.replace(/```[\s\S]*?```/g, (match) => {
+            const codeContent = match.replace(/```/g, '').trim();
+            return `<pre><code>${this.escapeHtml(codeContent)}</code></pre>`;
+        });
+        
+        // Process bold and italic
+        html = html.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        html = html.replace(/\*(.*?)\*/g, '<em>$1</em>');
+        
+        // Process inline code
+        html = html.replace(/`([^`]+)`/g, '<code>$1</code>');
+        
+        // Process strikethrough
+        html = html.replace(/~~(.*?)~~/g, '<del>$1</del>');
+        
+        // Process lists
+        html = html.replace(/^\s*[\*\-\+]\s+(.+)$/gim, '<li>$1</li>');
+        html = html.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+        
+        // Process numbered lists
+        html = html.replace(/^\s*\d+\.\s+(.+)$/gim, '<li>$1</li>');
+        
+        // Process blockquotes
+        html = html.replace(/^>\s+(.+)$/gim, '<blockquote>$1</blockquote>');
+        
+        // Process line breaks
+        html = html.replace(/\n\n/g, '</p><p>');
+        html = html.replace(/^/, '<p>').replace(/$/, '</p>');
+        html = html.replace(/<p><\/p>/g, '');
+        html = html.replace(/\n/g, '<br>');
+        
+        return html;
     }
 
     /**

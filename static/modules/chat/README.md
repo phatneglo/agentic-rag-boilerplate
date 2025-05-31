@@ -224,6 +224,26 @@ if (content.includes("your-keyword")) {
 - WebSocket connection pooling
 - Minimal external dependencies
 
+## Recent Improvements
+
+### Enhanced Markdown Processing
+- **Improved chat message rendering**: Headers, lists, blockquotes, code blocks properly formatted
+- **Enhanced artifact markdown display**: Full markdown support with styling
+- **Better line break handling**: Proper paragraph and line break conversion
+- **Code syntax highlighting**: Using Prism.js for better code display
+
+### Robust Mermaid Diagram Support
+- **Error handling**: Graceful error display with helpful debugging information
+- **Syntax validation**: Automatic cleaning and fixing of common syntax issues
+- **Multiple diagram types**: Support for flowcharts, graphs, and architecture diagrams
+- **Raw code fallback**: Shows diagram source when rendering fails
+
+### UI/UX Enhancements
+- **Clickable artifact markers**: Enhanced "[Code artifact generated]" buttons with visual feedback
+- **Responsive artifact viewer**: Proper space allocation and mobile-friendly design
+- **Send/Stop button functionality**: Visual state changes during message generation
+- **Enhanced styling**: Better typography, spacing, and visual hierarchy
+
 ---
 
 **Built with ❤️ for the Agentic RAG Project** 

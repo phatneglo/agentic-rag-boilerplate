@@ -34,7 +34,7 @@ class ChatMessages {
             card.addEventListener('click', () => {
                 const suggestion = card.getAttribute('data-suggestion');
                 if (suggestion && window.chatApp) {
-                    window.chatApp.sendMessage(suggestion);
+                    window.chatApp.sendMessageFromSuggestion(suggestion);
                 }
             });
         });
@@ -88,21 +88,51 @@ class ChatMessages {
     addMessage(message) {
         this.messages.push(message);
         
-        // Hide welcome screen if visible
-        if (this.welcomeScreen && !this.welcomeScreen.classList.contains('d-none')) {
-            this.welcomeScreen.classList.add('d-none');
-        }
-        
-        // Render message
         const messageElement = this.renderMessage(message);
         message.element = messageElement;
         
+        // Add message to container
         if (this.messagesContainer) {
             this.messagesContainer.appendChild(messageElement);
             this.scrollToBottom();
+            
+            // Setup artifact marker click handlers
+            this.setupArtifactMarkerHandlers(messageElement, message);
+        }
+        
+        // Hide welcome screen if this is the first message
+        if (this.messages.length === 1 && this.welcomeScreen) {
+            this.welcomeScreen.classList.add('d-none');
         }
         
         return message;
+    }
+
+    /**
+     * Setup click handlers for artifact markers
+     */
+    setupArtifactMarkerHandlers(messageElement, message) {
+        const artifactMarkers = messageElement.querySelectorAll('.artifact-marker');
+        
+        artifactMarkers.forEach((marker, index) => {
+            marker.addEventListener('click', () => {
+                // Show the corresponding artifact
+                if (message.artifacts && message.artifacts[index]) {
+                    const artifactData = message.artifacts[index];
+                    if (window.chatArtifacts) {
+                        const artifact = window.chatArtifacts.createArtifact(artifactData);
+                        window.chatArtifacts.showArtifact(artifact.id);
+                    }
+                } else if (message.artifacts && message.artifacts.length > 0) {
+                    // If no direct match, show the first artifact
+                    const artifactData = message.artifacts[0];
+                    if (window.chatArtifacts) {
+                        const artifact = window.chatArtifacts.createArtifact(artifactData);
+                        window.chatArtifacts.showArtifact(artifact.id);
+                    }
+                }
+            });
+        });
     }
 
     /**
@@ -197,22 +227,83 @@ class ChatMessages {
     }
 
     /**
-     * Process message content (basic markdown, links, etc.)
+     * Process message content for formatting
      */
     processMessageContent(content) {
-        // Basic text processing
-        let processed = this.escapeHtml(content);
+        if (!content) return '';
         
-        // Convert URLs to links
-        processed = this.linkifyUrls(processed);
+        // Replace artifact markers with clickable buttons
+        content = content.replace(/\[([^[\]]+)\s+artifact\s+generated\]/gi, (match, artifactType) => {
+            return `<span class="artifact-marker" data-artifact-type="${artifactType.toLowerCase()}">
+                        <i class="fas fa-cube me-1"></i>
+                        <strong>${artifactType} artifact generated</strong>
+                        <small class="text-muted ms-1">(click to view)</small>
+                    </span>`;
+        });
         
-        // Basic markdown support
-        processed = this.processBasicMarkdown(processed);
+        // Enhanced markdown processing
+        content = this.processEnhancedMarkdown(content);
         
-        // Convert newlines to <br>
-        processed = processed.replace(/\n/g, '<br>');
+        // Linkify URLs  
+        content = this.linkifyUrls(content);
         
-        return processed;
+        return content;
+    }
+
+    /**
+     * Process enhanced markdown with more features
+     */
+    processEnhancedMarkdown(text) {
+        // Process headers (### Header)
+        text = text.replace(/^### (.*$)/gim, '<h3>$1</h3>');
+        text = text.replace(/^## (.*$)/gim, '<h2>$1</h2>');
+        text = text.replace(/^# (.*$)/gim, '<h1>$1</h1>');
+        
+        // Process code blocks (```code```)
+        text = text.replace(/```[\s\S]*?```/g, (match) => {
+            const codeContent = match.replace(/```/g, '').trim();
+            return `<pre><code>${this.escapeHtml(codeContent)}</code></pre>`;
+        });
+        
+        // Process bold and italic
+        text = text.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+        text = text.replace(/\*(.*?)\*/g, '<em>$1</em>');
+        
+        // Process inline code
+        text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
+        
+        // Process strikethrough
+        text = text.replace(/~~(.*?)~~/g, '<del>$1</del>');
+        
+        // Process unordered lists
+        text = text.replace(/^\s*[\*\-\+]\s+(.+)$/gim, '<li>$1</li>');
+        text = text.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
+        
+        // Process ordered lists
+        text = text.replace(/^\s*\d+\.\s+(.+)$/gim, '<li>$1</li>');
+        text = text.replace(/(<li>.*<\/li>)/gs, (match) => {
+            // Only wrap with <ol> if not already wrapped with <ul>
+            if (!match.includes('<ul>')) {
+                return '<ol>' + match.replace(/<\/?ul>/g, '') + '</ol>';
+            }
+            return match;
+        });
+        
+        // Process blockquotes
+        text = text.replace(/^>\s+(.+)$/gim, '<blockquote>$1</blockquote>');
+        
+        // Process line breaks - convert double newlines to paragraphs
+        text = text.replace(/\n\n/g, '</p><p>');
+        text = text.replace(/^/, '<p>').replace(/$/, '</p>');
+        
+        // Clean up empty paragraphs
+        text = text.replace(/<p><\/p>/g, '');
+        text = text.replace(/<p>\s*<\/p>/g, '');
+        
+        // Convert single line breaks to <br>
+        text = text.replace(/(?<!>)\n(?!<)/g, '<br>');
+        
+        return text;
     }
 
     /**
@@ -221,17 +312,6 @@ class ChatMessages {
     linkifyUrls(text) {
         const urlRegex = /(https?:\/\/[^\s]+)/g;
         return text.replace(urlRegex, '<a href="$1" target="_blank" rel="noopener noreferrer">$1</a>');
-    }
-
-    /**
-     * Process basic markdown
-     */
-    processBasicMarkdown(text) {
-        return text
-            .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-            .replace(/\*(.*?)\*/g, '<em>$1</em>')
-            .replace(/`([^`]+)`/g, '<code>$1</code>')
-            .replace(/~~(.*?)~~/g, '<del>$1</del>');
     }
 
     /**
@@ -263,7 +343,7 @@ class ChatMessages {
      */
     createArtifactsDisplay(artifacts) {
         const artifactsDiv = document.createElement('div');
-        artifactsDiv.className = 'message-artifacts';
+        artifactsDiv.className = 'message-artifacts mt-2';
         
         artifacts.forEach(artifactData => {
             // Create artifact and get button HTML
@@ -272,7 +352,12 @@ class ChatMessages {
             
             const buttonContainer = document.createElement('div');
             buttonContainer.innerHTML = buttonHtml;
-            artifactsDiv.appendChild(buttonContainer.firstElementChild);
+            const button = buttonContainer.firstElementChild;
+            
+            // Add enhanced styling for better visibility
+            button.classList.add('artifact-button-enhanced');
+            
+            artifactsDiv.appendChild(button);
         });
         
         return artifactsDiv;

@@ -61,7 +61,7 @@ async def upload_files(
             )
         
         # Upload files using default settings - no custom metadata or folder structure
-        results = await object_storage_service.upload_multiple_files(
+        results, errors = await object_storage_service.upload_multiple_files(
             files=files,
             folder_structure=None,  # Use default from settings
             file_metadata=None  # No custom metadata
@@ -71,7 +71,7 @@ async def upload_files(
         file_infos = [FileInfo(**result) for result in results]
         
         successful_uploads = len(file_infos)
-        failed_uploads = len(files) - successful_uploads
+        failed_uploads = len(errors)
         
         message = f"{successful_uploads} file{'s' if successful_uploads != 1 else ''} uploaded successfully"
         if failed_uploads > 0:
@@ -90,6 +90,7 @@ async def upload_files(
             total_files=len(files),
             successful_uploads=successful_uploads,
             failed_uploads=failed_uploads,
+            errors=errors,  # Include error details
             timestamp=time.time()
         )
         

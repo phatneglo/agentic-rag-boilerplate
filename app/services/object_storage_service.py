@@ -216,7 +216,7 @@ class ObjectStorageService(LoggerMixin):
         files: List[UploadFile],
         folder_structure: Optional[str] = None,
         file_metadata: Optional[Dict[str, str]] = None
-    ) -> List[Dict[str, Any]]:
+    ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
         """
         Upload multiple files to object storage.
         
@@ -226,7 +226,7 @@ class ObjectStorageService(LoggerMixin):
             file_metadata: Additional metadata to store with files
             
         Returns:
-            List of dictionaries containing file information
+            Tuple of (successful_results, errors)
         """
         results = []
         errors = []
@@ -257,7 +257,7 @@ class ObjectStorageService(LoggerMixin):
                 failed=len(errors)
             )
         
-        return results
+        return results, errors
     
     async def download_file(self, file_path: str) -> bytes:
         """

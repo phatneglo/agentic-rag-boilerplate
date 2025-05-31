@@ -106,7 +106,7 @@ class FileManagerService:
             raise HTTPException(status_code=500, detail="Failed to delete item")
     
     async def rename_item(self, path: str, new_name: str) -> Dict:
-        """Rename a file or folder."""
+        """Rename a file or folder by copying to new location and deleting original."""
         try:
             if not new_name or new_name.strip() == "":
                 raise HTTPException(status_code=400, detail="New name cannot be empty")
@@ -114,17 +114,67 @@ class FileManagerService:
             if any(char in new_name for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']):
                 raise HTTPException(status_code=400, detail="Invalid characters in name")
             
-            # For object storage, we need to copy the object to new location and delete old one
-            # This is a simplified implementation - in production you might want to handle this differently
-            
-            # Get the parent path
+            # Get the parent path and create new path
             path_parts = path.split('/')
             parent_path = '/'.join(path_parts[:-1]) if len(path_parts) > 1 else ""
             new_path = f"{parent_path}/{new_name}" if parent_path else new_name
             
-            # For now, return an error as rename is complex in object storage
-            # In a full implementation, you would copy the object and delete the original
-            raise HTTPException(status_code=501, detail="Rename operation not yet implemented for object storage")
+            # Check if new name already exists
+            if await self.storage._object_exists(self.storage._get_object_key(new_path)):
+                raise HTTPException(status_code=409, detail="Item with this name already exists")
+            
+            # For files: copy and delete
+            if not path.endswith('/'):
+                # Copy file to new location
+                copy_source = {'Bucket': self.storage.bucket, 'Key': self.storage._get_object_key(path)}
+                self.storage.s3_client.copy_object(
+                    CopySource=copy_source,
+                    Bucket=self.storage.bucket,
+                    Key=self.storage._get_object_key(new_path)
+                )
+                
+                # Delete original file
+                await self.storage.delete_object(path)
+            else:
+                # For folders: copy all objects with the prefix
+                old_prefix = self.storage._get_object_key(path)
+                new_prefix = self.storage._get_object_key(new_path) + '/'
+                
+                # List all objects with the old prefix
+                paginator = self.storage.s3_client.get_paginator('list_objects_v2')
+                pages = paginator.paginate(Bucket=self.storage.bucket, Prefix=old_prefix)
+                
+                objects_to_copy = []
+                for page in pages:
+                    for obj in page.get('Contents', []):
+                        objects_to_copy.append(obj['Key'])
+                
+                # Copy each object to new location
+                for old_key in objects_to_copy:
+                    new_key = old_key.replace(old_prefix, new_prefix, 1)
+                    copy_source = {'Bucket': self.storage.bucket, 'Key': old_key}
+                    self.storage.s3_client.copy_object(
+                        CopySource=copy_source,
+                        Bucket=self.storage.bucket,
+                        Key=new_key
+                    )
+                
+                # Delete all original objects
+                if objects_to_copy:
+                    delete_objects = [{'Key': key} for key in objects_to_copy]
+                    self.storage.s3_client.delete_objects(
+                        Bucket=self.storage.bucket,
+                        Delete={'Objects': delete_objects}
+                    )
+            
+            logger.info(f"Renamed {path} to {new_path}")
+            
+            return {
+                "message": "Item renamed successfully",
+                "old_name": path_parts[-1],
+                "new_name": new_name,
+                "new_path": new_path
+            }
             
         except HTTPException:
             raise
@@ -132,12 +182,75 @@ class FileManagerService:
             logger.error(f"Error renaming item {path} to {new_name}: {e}")
             raise HTTPException(status_code=500, detail="Failed to rename item")
     
-    async def move_item(self, source_path: str, destination_path: str) -> Dict:
-        """Move a file or folder to a new location."""
+    async def move_item(self, source_path: str, destination_path: str, new_name: Optional[str] = None) -> Dict:
+        """Move a file or folder to a new location by copying and deleting."""
         try:
-            # For object storage, this would involve copying and deleting
-            # This is a simplified implementation
-            raise HTTPException(status_code=501, detail="Move operation not yet implemented for object storage")
+            # Get source item name
+            source_parts = source_path.split('/')
+            item_name = source_parts[-1]
+            
+            # Use new name if provided, otherwise keep original name
+            final_name = new_name if new_name else item_name
+            
+            # Create destination path
+            dest_path = f"{destination_path}/{final_name}" if destination_path else final_name
+            
+            # Check if destination already exists
+            if await self.storage._object_exists(self.storage._get_object_key(dest_path)):
+                raise HTTPException(status_code=409, detail="Item already exists in destination")
+            
+            # For files: copy and delete
+            if not source_path.endswith('/'):
+                # Copy file to new location
+                copy_source = {'Bucket': self.storage.bucket, 'Key': self.storage._get_object_key(source_path)}
+                self.storage.s3_client.copy_object(
+                    CopySource=copy_source,
+                    Bucket=self.storage.bucket,
+                    Key=self.storage._get_object_key(dest_path)
+                )
+                
+                # Delete original file
+                await self.storage.delete_object(source_path)
+            else:
+                # For folders: copy all objects with the prefix
+                old_prefix = self.storage._get_object_key(source_path)
+                new_prefix = self.storage._get_object_key(dest_path) + '/'
+                
+                # List all objects with the old prefix
+                paginator = self.storage.s3_client.get_paginator('list_objects_v2')
+                pages = paginator.paginate(Bucket=self.storage.bucket, Prefix=old_prefix)
+                
+                objects_to_copy = []
+                for page in pages:
+                    for obj in page.get('Contents', []):
+                        objects_to_copy.append(obj['Key'])
+                
+                # Copy each object to new location
+                for old_key in objects_to_copy:
+                    new_key = old_key.replace(old_prefix, new_prefix, 1)
+                    copy_source = {'Bucket': self.storage.bucket, 'Key': old_key}
+                    self.storage.s3_client.copy_object(
+                        CopySource=copy_source,
+                        Bucket=self.storage.bucket,
+                        Key=new_key
+                    )
+                
+                # Delete all original objects
+                if objects_to_copy:
+                    delete_objects = [{'Key': key} for key in objects_to_copy]
+                    self.storage.s3_client.delete_objects(
+                        Bucket=self.storage.bucket,
+                        Delete={'Objects': delete_objects}
+                    )
+            
+            logger.info(f"Moved {source_path} to {dest_path}")
+            
+            return {
+                "message": "Item moved successfully",
+                "name": final_name,
+                "source_path": source_path,
+                "destination_path": dest_path
+            }
             
         except HTTPException:
             raise

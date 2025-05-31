@@ -162,11 +162,13 @@ async def move_item(request: MoveItemRequest):
     
     - **source_path**: Current path of the item
     - **destination_path**: Destination directory path
+    - **new_name**: Optional new name for the item
     """
     try:
         result = await file_manager_service.move_item(
             source_path=request.source_path,
-            destination_path=request.destination_path
+            destination_path=request.destination_path,
+            new_name=request.new_name
         )
         return FileOperationResponse(
             success=True,

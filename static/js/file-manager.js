@@ -15,6 +15,13 @@ class FileManager {
         this.searchQuery = '';
         this.isLoading = false;
         
+        // Pagination and performance
+        this.itemsPerPage = 50;
+        this.currentPage = 1;
+        this.totalItems = 0;
+        this.allItems = [];
+        this.displayedItems = [];
+        
         // API base URL
         this.apiBase = '/api/v1/file-manager';
         
@@ -65,10 +72,12 @@ class FileManager {
         // Selection
         document.getElementById('selectAllBtn').addEventListener('click', this.toggleSelectAll.bind(this));
         document.getElementById('deleteSelectedBtn').addEventListener('click', this.deleteSelected.bind(this));
+        document.getElementById('moveSelectedBtn').addEventListener('click', this.moveSelected.bind(this));
         
         // Modal forms
         document.getElementById('newFolderForm').addEventListener('submit', this.createFolder.bind(this));
         document.getElementById('renameForm').addEventListener('submit', this.renameItem.bind(this));
+        document.getElementById('moveForm').addEventListener('submit', this.moveItem.bind(this));
         
         // Upload functionality
         document.getElementById('browseBtn').addEventListener('click', () => {
@@ -88,6 +97,10 @@ class FileManager {
                 link.classList.add('active');
             });
         });
+        
+        // Move modal functionality
+        document.getElementById('moveUpBtn').addEventListener('click', this.moveUpDirectory.bind(this));
+        document.getElementById('copyInsteadOfMove').addEventListener('change', this.toggleMoveMode.bind(this));
     }
     
     /**
@@ -156,9 +169,14 @@ class FileManager {
             const data = await response.json();
             
             if (data.success) {
+                this.allItems = data.data.items;
+                this.totalItems = data.data.total_items;
+                this.currentPage = 1;
+                
                 this.renderDirectory(data.data);
                 this.updateBreadcrumbs(data.data.breadcrumbs);
-                this.updateItemCount(data.data.total_items);
+                this.updateItemCount(this.totalItems);
+                this.setupInfiniteScroll();
             } else {
                 this.showError('Failed to load directory');
             }
@@ -172,28 +190,131 @@ class FileManager {
     }
     
     /**
+     * Setup infinite scroll for large directories
+     */
+    setupInfiniteScroll() {
+        const fileGrid = document.getElementById('fileGrid');
+        const observer = new IntersectionObserver((entries) => {
+            entries.forEach(entry => {
+                if (entry.isIntersecting && this.hasMoreItems()) {
+                    this.loadMoreItems();
+                }
+            });
+        }, {
+            rootMargin: '100px'
+        });
+        
+        // Create a sentinel element at the bottom
+        const sentinel = document.createElement('div');
+        sentinel.id = 'scroll-sentinel';
+        sentinel.style.height = '1px';
+        fileGrid.appendChild(sentinel);
+        
+        observer.observe(sentinel);
+    }
+    
+    /**
+     * Check if there are more items to load
+     */
+    hasMoreItems() {
+        return this.displayedItems.length < this.allItems.length;
+    }
+    
+    /**
+     * Load more items (pagination)
+     */
+    loadMoreItems() {
+        if (this.isLoading || !this.hasMoreItems()) return;
+        
+        const startIndex = this.displayedItems.length;
+        const endIndex = Math.min(startIndex + this.itemsPerPage, this.allItems.length);
+        const newItems = this.allItems.slice(startIndex, endIndex);
+        
+        this.displayedItems.push(...newItems);
+        this.renderNewItems(newItems);
+    }
+    
+    /**
+     * Render new items (for infinite scroll)
+     */
+    renderNewItems(items) {
+        const fileGrid = document.getElementById('fileGrid');
+        const sentinel = document.getElementById('scroll-sentinel');
+        
+        // Sort new items
+        const sortedItems = this.sortItems(items);
+        
+        // Create document fragment for better performance
+        const fragment = document.createDocumentFragment();
+        
+        sortedItems.forEach(item => {
+            const itemElement = document.createElement('div');
+            itemElement.innerHTML = this.renderFileItem(item);
+            fragment.appendChild(itemElement.firstElementChild);
+        });
+        
+        // Insert before sentinel
+        fileGrid.insertBefore(fragment, sentinel);
+    }
+    
+    /**
      * Render directory contents
      */
     renderDirectory(data) {
         const fileGrid = document.getElementById('fileGrid');
         const emptyState = document.getElementById('emptyState');
         
-        if (data.items.length === 0) {
-            fileGrid.innerHTML = '';
+        // Clear previous content
+        fileGrid.innerHTML = '';
+        
+        if (this.allItems.length === 0) {
             emptyState.classList.remove('d-none');
             return;
         }
         
         emptyState.classList.add('d-none');
         
-        // Sort items
-        const sortedItems = this.sortItems(data.items);
+        // Sort all items
+        this.allItems = this.sortItems(this.allItems);
         
-        // Render items
-        fileGrid.innerHTML = sortedItems.map(item => this.renderFileItem(item)).join('');
+        // Load initial batch
+        const initialItems = this.allItems.slice(0, this.itemsPerPage);
+        this.displayedItems = [...initialItems];
+        
+        // Render initial items
+        fileGrid.innerHTML = this.displayedItems.map(item => this.renderFileItem(item)).join('');
         
         // Apply view mode
         fileGrid.className = `file-grid ${this.viewMode === 'list' ? 'list-view' : ''}`;
+        
+        // Show load more button if there are more items
+        if (this.hasMoreItems()) {
+            this.addLoadMoreButton();
+        }
+    }
+    
+    /**
+     * Add load more button
+     */
+    addLoadMoreButton() {
+        const fileGrid = document.getElementById('fileGrid');
+        const loadMoreBtn = document.createElement('div');
+        loadMoreBtn.className = 'load-more-container text-center mt-3';
+        loadMoreBtn.innerHTML = `
+            <button class="btn btn-outline-primary" id="loadMoreBtn">
+                <i class="fas fa-chevron-down me-2"></i>Load More Files
+            </button>
+        `;
+        
+        fileGrid.appendChild(loadMoreBtn);
+        
+        // Add click handler
+        document.getElementById('loadMoreBtn').addEventListener('click', () => {
+            this.loadMoreItems();
+            if (!this.hasMoreItems()) {
+                loadMoreBtn.remove();
+            }
+        });
     }
     
     /**
@@ -301,8 +422,159 @@ class FileManager {
      * Handle search input
      */
     async handleSearch(e) {
-        this.searchQuery = e.target.value.trim();
-        await this.loadDirectory();
+        const query = e.target.value.trim();
+        this.searchQuery = query;
+        
+        // Clear search if query is empty
+        if (!query) {
+            await this.loadDirectory();
+            return;
+        }
+        
+        // Debounced search for better performance
+        this.performSearch();
+    }
+    
+    /**
+     * Perform search with debouncing
+     */
+    performSearch = this.debounce(async () => {
+        if (this.searchQuery.length < 2) {
+            await this.loadDirectory();
+            return;
+        }
+        
+        this.isLoading = true;
+        this.showLoading();
+        
+        try {
+            const params = new URLSearchParams({
+                query: this.searchQuery,
+                path: this.currentPath
+            });
+            
+            const response = await fetch(`${this.apiBase}/search?${params}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                this.allItems = data.data.results;
+                this.totalItems = data.data.total_results;
+                this.currentPage = 1;
+                
+                this.renderSearchResults(data.data);
+                this.updateItemCount(this.totalItems);
+            } else {
+                this.showError('Search failed');
+            }
+        } catch (error) {
+            console.error('Error searching:', error);
+            this.showError('Search failed');
+        } finally {
+            this.isLoading = false;
+            this.hideLoading();
+        }
+    }, 300);
+    
+    /**
+     * Render search results
+     */
+    renderSearchResults(data) {
+        const fileGrid = document.getElementById('fileGrid');
+        const emptyState = document.getElementById('emptyState');
+        
+        // Clear previous content
+        fileGrid.innerHTML = '';
+        
+        if (this.allItems.length === 0) {
+            emptyState.classList.remove('d-none');
+            emptyState.innerHTML = `
+                <div class="text-center py-5">
+                    <i class="fas fa-search text-muted mb-3" style="font-size: 3rem;"></i>
+                    <h5>No results found</h5>
+                    <p class="text-muted">No files or folders match your search for "${this.escapeHtml(this.searchQuery)}"</p>
+                </div>
+            `;
+            return;
+        }
+        
+        emptyState.classList.add('d-none');
+        
+        // Load initial batch
+        const initialItems = this.allItems.slice(0, this.itemsPerPage);
+        this.displayedItems = [...initialItems];
+        
+        // Render initial items with search highlighting
+        fileGrid.innerHTML = this.displayedItems.map(item => this.renderSearchItem(item)).join('');
+        
+        // Apply view mode
+        fileGrid.className = `file-grid ${this.viewMode === 'list' ? 'list-view' : ''}`;
+        
+        // Show load more button if there are more items
+        if (this.hasMoreItems()) {
+            this.addLoadMoreButton();
+        }
+    }
+    
+    /**
+     * Render search item with highlighting
+     */
+    renderSearchItem(item) {
+        const isSelected = this.selectedItems.has(item.path);
+        const selectedClass = isSelected ? 'selected' : '';
+        const folderClass = item.is_directory ? 'folder' : '';
+        
+        // Highlight search terms
+        const highlightedName = this.highlightSearchTerm(item.name, this.searchQuery);
+        
+        if (this.viewMode === 'list') {
+            return `
+                <div class="file-item ${selectedClass} ${folderClass}" 
+                     data-path="${item.path}" 
+                     data-type="${item.type}"
+                     data-name="${item.name}">
+                    <input type="checkbox" class="form-check-input selection-checkbox" 
+                           ${isSelected ? 'checked' : ''}>
+                    <i class="${item.icon} file-icon"></i>
+                    <div class="file-info">
+                        <div class="file-name">${highlightedName}</div>
+                        ${item.relative_path ? `<small class="text-muted">in ${this.escapeHtml(item.relative_path)}</small>` : ''}
+                    </div>
+                    <div class="file-meta">
+                        <div>${item.size_formatted}</div>
+                        <div class="text-muted">${this.formatDate(item.modified)}</div>
+                    </div>
+                </div>
+            `;
+        } else {
+            return `
+                <div class="file-item ${selectedClass} ${folderClass}" 
+                     data-path="${item.path}" 
+                     data-type="${item.type}"
+                     data-name="${item.name}">
+                    <input type="checkbox" class="form-check-input selection-checkbox" 
+                           ${isSelected ? 'checked' : ''}>
+                    <i class="${item.icon} file-icon"></i>
+                    <div class="file-name">${highlightedName}</div>
+                    <div class="file-meta">
+                        ${item.size_formatted} • ${this.formatDate(item.modified)}
+                        ${item.relative_path ? `<br><small class="text-muted">in ${this.escapeHtml(item.relative_path)}</small>` : ''}
+                    </div>
+                </div>
+            `;
+        }
+    }
+    
+    /**
+     * Highlight search terms in text
+     */
+    highlightSearchTerm(text, searchTerm) {
+        if (!searchTerm) return this.escapeHtml(text);
+        
+        const escapedText = this.escapeHtml(text);
+        const escapedTerm = this.escapeHtml(searchTerm);
+        const regex = new RegExp(`(${escapedTerm})`, 'gi');
+        
+        return escapedText.replace(regex, '<mark>$1</mark>');
     }
     
     /**
@@ -311,6 +583,13 @@ class FileManager {
     async clearSearch() {
         document.getElementById('searchInput').value = '';
         this.searchQuery = '';
+        
+        // Reset pagination
+        this.currentPage = 1;
+        this.allItems = [];
+        this.displayedItems = [];
+        
+        // Reload directory
         await this.loadDirectory();
     }
     
@@ -592,8 +871,11 @@ class FileManager {
             uploadArea.classList.add('dragover');
         });
         
-        uploadArea.addEventListener('dragleave', () => {
-            uploadArea.classList.remove('dragover');
+        uploadArea.addEventListener('dragleave', (e) => {
+            // Only remove dragover if we're leaving the upload area entirely
+            if (!uploadArea.contains(e.relatedTarget)) {
+                uploadArea.classList.remove('dragover');
+            }
         });
         
         uploadArea.addEventListener('drop', (e) => {
@@ -605,20 +887,27 @@ class FileManager {
             }
         });
         
-        uploadArea.addEventListener('click', () => {
-            document.getElementById('fileInput').click();
-        });
-        
         // Main area drag and drop
         fileContainer.addEventListener('dragover', (e) => {
             e.preventDefault();
+            fileContainer.classList.add('drag-over');
+        });
+        
+        fileContainer.addEventListener('dragleave', (e) => {
+            if (!fileContainer.contains(e.relatedTarget)) {
+                fileContainer.classList.remove('drag-over');
+            }
         });
         
         fileContainer.addEventListener('drop', (e) => {
             e.preventDefault();
+            fileContainer.classList.remove('drag-over');
             const files = e.dataTransfer.files;
             if (files.length > 0) {
-                this.uploadFiles(files);
+                // Show upload modal with files
+                this.showUploadModal();
+                // Auto-upload the dropped files
+                setTimeout(() => this.uploadFiles(files), 100);
             }
         });
     }
@@ -666,6 +955,7 @@ class FileManager {
         const path = target.dataset.path;
         const name = target.dataset.name;
         const isDirectory = target.dataset.type === 'folder';
+        const icon = target.querySelector('.file-icon').className;
         
         switch (action) {
             case 'open':
@@ -680,6 +970,10 @@ class FileManager {
                 
             case 'rename':
                 this.showRenameModal(path, name);
+                break;
+                
+            case 'move':
+                this.showMoveModal(path, name, icon);
                 break;
                 
             case 'delete':
@@ -955,6 +1249,305 @@ class FileManager {
             hour: '2-digit',
             minute: '2-digit'
         });
+    }
+    
+    /**
+     * Show move modal
+     */
+    showMoveModal(path, name, icon) {
+        const modal = new bootstrap.Modal(document.getElementById('moveModal'));
+        
+        // Set item info
+        document.getElementById('moveItemIcon').className = icon;
+        document.getElementById('moveItemName').textContent = name;
+        document.getElementById('moveNewName').value = '';
+        document.getElementById('moveNewName').disabled = false; // Enable for single items
+        document.getElementById('copyInsteadOfMove').checked = false;
+        
+        // Store current item data
+        this.moveItemData = { path, name, icon, isBulk: false };
+        this.moveCurrentPath = '';
+        
+        // Load root folders
+        this.loadMoveFolders('');
+        
+        modal.show();
+    }
+    
+    /**
+     * Load folders for move modal
+     */
+    async loadMoveFolders(path) {
+        const folderList = document.getElementById('moveFolderList');
+        
+        // Show loading
+        folderList.innerHTML = `
+            <div class="text-center py-4">
+                <div class="spinner-border spinner-border-sm text-primary" role="status">
+                    <span class="visually-hidden">Loading...</span>
+                </div>
+                <p class="text-muted mt-2 mb-0">Loading folders...</p>
+            </div>
+        `;
+        
+        try {
+            const params = new URLSearchParams({ path });
+            const response = await fetch(`${this.apiBase}/?${params}`);
+            const data = await response.json();
+            
+            if (data.success) {
+                this.renderMoveFolders(data.data.items, path);
+                this.updateMoveBreadcrumbs(data.data.breadcrumbs);
+                this.moveCurrentPath = path;
+            } else {
+                folderList.innerHTML = `
+                    <div class="text-center py-4 text-danger">
+                        <i class="fas fa-exclamation-triangle mb-2"></i>
+                        <p class="mb-0">Failed to load folders</p>
+                    </div>
+                `;
+            }
+        } catch (error) {
+            console.error('Error loading folders:', error);
+            folderList.innerHTML = `
+                <div class="text-center py-4 text-danger">
+                    <i class="fas fa-exclamation-triangle mb-2"></i>
+                    <p class="mb-0">Error loading folders</p>
+                </div>
+            `;
+        }
+    }
+    
+    /**
+     * Render folders in move modal
+     */
+    renderMoveFolders(items, currentPath) {
+        const folderList = document.getElementById('moveFolderList');
+        const folders = items.filter(item => item.is_directory);
+        
+        if (folders.length === 0) {
+            folderList.innerHTML = `
+                <div class="text-center py-4 text-muted">
+                    <i class="fas fa-folder-open mb-2"></i>
+                    <p class="mb-0">No folders in this location</p>
+                </div>
+            `;
+            return;
+        }
+        
+        const folderHtml = folders.map(folder => {
+            // Don't show the folder we're moving
+            if (this.moveItemData && folder.path === this.moveItemData.path) {
+                return '';
+            }
+            
+            return `
+                <div class="folder-item d-flex align-items-center p-2 rounded hover-bg" 
+                     data-path="${folder.path}" style="cursor: pointer;">
+                    <i class="${folder.icon} me-2 text-warning"></i>
+                    <span class="flex-grow-1">${this.escapeHtml(folder.name)}</span>
+                    <small class="text-muted">${this.formatDate(folder.modified)}</small>
+                </div>
+            `;
+        }).join('');
+        
+        folderList.innerHTML = folderHtml;
+        
+        // Add click handlers
+        folderList.querySelectorAll('.folder-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const path = item.dataset.path;
+                this.loadMoveFolders(path);
+            });
+        });
+    }
+    
+    /**
+     * Update move breadcrumbs
+     */
+    updateMoveBreadcrumbs(breadcrumbs) {
+        const breadcrumbNav = document.getElementById('moveBreadcrumb');
+        
+        breadcrumbNav.innerHTML = breadcrumbs.map((crumb, index) => {
+            const isLast = index === breadcrumbs.length - 1;
+            const icon = index === 0 ? '<i class="fas fa-home me-1"></i>' : '';
+            
+            if (isLast) {
+                return `<li class="breadcrumb-item active">${icon}${this.escapeHtml(crumb.name)}</li>`;
+            } else {
+                return `
+                    <li class="breadcrumb-item">
+                        <a href="#" data-path="${crumb.path}">${icon}${this.escapeHtml(crumb.name)}</a>
+                    </li>
+                `;
+            }
+        }).join('');
+        
+        // Add click handlers to breadcrumb links
+        breadcrumbNav.querySelectorAll('a').forEach(link => {
+            link.addEventListener('click', (e) => {
+                e.preventDefault();
+                const path = link.dataset.path;
+                this.loadMoveFolders(path);
+            });
+        });
+    }
+    
+    /**
+     * Move up one directory
+     */
+    moveUpDirectory() {
+        if (!this.moveCurrentPath) return;
+        
+        const pathParts = this.moveCurrentPath.split('/');
+        pathParts.pop();
+        const parentPath = pathParts.join('/');
+        
+        this.loadMoveFolders(parentPath);
+    }
+    
+    /**
+     * Toggle between move and copy mode
+     */
+    toggleMoveMode() {
+        const checkbox = document.getElementById('copyInsteadOfMove');
+        const submitBtn = document.getElementById('moveSubmitBtn');
+        
+        if (checkbox.checked) {
+            submitBtn.innerHTML = '<i class="fas fa-copy me-1"></i>Copy';
+        } else {
+            submitBtn.innerHTML = '<i class="fas fa-arrows-alt me-1"></i>Move';
+        }
+    }
+    
+    /**
+     * Handle move/copy form submission
+     */
+    async moveItem(e) {
+        e.preventDefault();
+        
+        const newName = document.getElementById('moveNewName').value.trim();
+        const isCopy = document.getElementById('copyInsteadOfMove').checked;
+        const destinationPath = this.moveCurrentPath;
+        
+        try {
+            if (this.moveItemData.isBulk) {
+                // Handle bulk move
+                if (isCopy) {
+                    this.showError('Bulk copy operation not yet implemented');
+                    return;
+                }
+                
+                // Move multiple items
+                const promises = this.moveItemData.paths.map(path => 
+                    fetch(`${this.apiBase}/move`, {
+                        method: 'PUT',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            source_path: path,
+                            destination_path: destinationPath
+                        })
+                    })
+                );
+                
+                const responses = await Promise.all(promises);
+                const results = await Promise.all(responses.map(r => r.json()));
+                
+                const successCount = results.filter(r => r.success).length;
+                const failCount = results.length - successCount;
+                
+                if (successCount > 0) {
+                    this.showSuccess(`${successCount} item(s) moved successfully`);
+                }
+                if (failCount > 0) {
+                    this.showError(`${failCount} item(s) failed to move`);
+                }
+                
+                this.clearSelection();
+            } else {
+                // Handle single item move
+                if (isCopy) {
+                    this.showError('Copy operation not yet implemented');
+                    return;
+                }
+                
+                const response = await fetch(`${this.apiBase}/move`, {
+                    method: 'PUT',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        source_path: this.moveItemData.path,
+                        destination_path: destinationPath,
+                        new_name: newName || undefined
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    this.showSuccess('Item moved successfully');
+                } else {
+                    this.showError(data.message || 'Failed to move item');
+                }
+            }
+            
+            bootstrap.Modal.getInstance(document.getElementById('moveModal')).hide();
+            await this.loadDirectory();
+            
+        } catch (error) {
+            console.error('Error moving item(s):', error);
+            this.showError('Failed to move item(s)');
+        }
+    }
+    
+    /**
+     * Move selected items
+     */
+    async moveSelected() {
+        if (this.selectedItems.size === 0) return;
+        
+        if (this.selectedItems.size === 1) {
+            // Single item - use the regular move modal
+            const path = Array.from(this.selectedItems)[0];
+            const item = document.querySelector(`[data-path="${path}"]`);
+            if (item) {
+                const name = item.dataset.name;
+                const icon = item.querySelector('.file-icon').className;
+                this.showMoveModal(path, name, icon);
+            }
+        } else {
+            // Multiple items - show simplified move modal
+            this.showBulkMoveModal();
+        }
+    }
+    
+    /**
+     * Show bulk move modal for multiple items
+     */
+    showBulkMoveModal() {
+        const modal = new bootstrap.Modal(document.getElementById('moveModal'));
+        
+        // Set item info for multiple items
+        document.getElementById('moveItemIcon').className = 'fas fa-files';
+        document.getElementById('moveItemName').textContent = `${this.selectedItems.size} items`;
+        document.getElementById('moveNewName').value = '';
+        document.getElementById('moveNewName').disabled = true; // Can't rename multiple items
+        document.getElementById('copyInsteadOfMove').checked = false;
+        
+        // Store bulk move data
+        this.moveItemData = { 
+            paths: Array.from(this.selectedItems),
+            isBulk: true
+        };
+        this.moveCurrentPath = '';
+        
+        // Load root folders
+        this.loadMoveFolders('');
+        
+        modal.show();
     }
 }
 

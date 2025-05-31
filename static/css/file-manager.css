@@ -125,6 +125,7 @@ body {
     grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
     gap: 1rem;
     padding: 0.5rem 0;
+    contain: layout style paint;
 }
 
 .file-item {
@@ -137,6 +138,8 @@ body {
     background-color: white;
     position: relative;
     user-select: none;
+    will-change: transform;
+    backface-visibility: hidden;
 }
 
 .file-item:hover {
@@ -252,8 +255,10 @@ body {
 }
 
 .upload-area.dragover {
-    border-color: var(--primary-color) !important;
-    background-color: rgba(13, 110, 253, 0.1);
+    background-color: var(--bs-primary-bg-subtle);
+    border-color: var(--bs-primary);
+    transform: scale(1.02);
+    transition: all 0.2s ease;
 }
 
 /* Context Menu */
@@ -341,8 +346,8 @@ body {
     }
     
     .file-grid {
-        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-        gap: 0.75rem;
+        grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+        gap: 10px;
     }
     
     .search-container {
@@ -356,6 +361,22 @@ body {
     
     .navbar .d-flex.gap-2 .btn .me-1 {
         display: none;
+    }
+    
+    .file-item {
+        padding: 10px;
+    }
+    
+    .file-name {
+        font-size: 0.875rem;
+    }
+    
+    .file-meta {
+        font-size: 0.75rem;
+    }
+    
+    .load-more-container {
+        padding: 15px;
     }
 }
 
@@ -441,4 +462,101 @@ body {
 .file-item .file-icon.fa-file-video { color: #e91e63; }
 .file-item .file-icon.fa-file-audio { color: #ff9800; }
 .file-item .file-icon.fa-file-archive { color: #795548; }
-.file-item .file-icon.fa-code { color: #20c997; } 
+.file-item .file-icon.fa-code { color: #20c997; }
+
+/* Drag and drop effects */
+.drag-over {
+    background-color: var(--bs-primary-bg-subtle);
+    border: 2px dashed var(--bs-primary);
+    border-radius: 8px;
+}
+
+/* Search highlighting */
+mark {
+    background-color: var(--bs-warning);
+    color: var(--bs-dark);
+    padding: 0 2px;
+    border-radius: 2px;
+    font-weight: 500;
+}
+
+/* Load more button */
+.load-more-container {
+    padding: 20px;
+    border-top: 1px solid var(--bs-border-color);
+    margin-top: 20px;
+}
+
+.load-more-container .btn {
+    min-width: 150px;
+}
+
+/* Infinite scroll sentinel */
+#scroll-sentinel {
+    height: 1px;
+    width: 100%;
+    background: transparent;
+}
+
+/* Loading states */
+.file-grid.loading {
+    opacity: 0.7;
+    pointer-events: none;
+}
+
+/* Search results styling */
+.search-result-path {
+    font-size: 0.875rem;
+    color: var(--bs-secondary);
+    margin-top: 2px;
+}
+
+/* Smooth animations */
+.file-item {
+    transition: all 0.2s ease;
+}
+
+.file-item:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+/* Better focus states */
+.file-item:focus-within {
+    outline: 2px solid var(--bs-primary);
+    outline-offset: 2px;
+}
+
+/* Improved selection states */
+.file-item.selected {
+    background-color: var(--bs-primary-bg-subtle);
+    border-color: var(--bs-primary);
+    box-shadow: 0 0 0 2px rgba(var(--bs-primary-rgb), 0.25);
+}
+
+/* Move Modal Styles */
+.folder-item {
+    transition: background-color 0.2s ease;
+}
+
+.folder-item:hover,
+.hover-bg:hover {
+    background-color: var(--bs-light) !important;
+}
+
+.folder-item:active {
+    background-color: var(--bs-primary-bg-subtle) !important;
+}
+
+#moveFolderList {
+    max-height: 300px;
+}
+
+#moveBreadcrumb .breadcrumb-item a {
+    color: var(--bs-primary);
+    text-decoration: none;
+}
+
+#moveBreadcrumb .breadcrumb-item a:hover {
+    text-decoration: underline;
+} 

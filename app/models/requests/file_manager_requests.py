@@ -87,6 +87,11 @@ class MoveItemRequest(BaseModel):
         description="Destination directory path",
         example="documents/archive"
     )
+    new_name: Optional[str] = Field(
+        default=None,
+        description="Optional new name for the item",
+        example="renamed_file.txt"
+    )
     
     @validator("destination_path")
     def validate_destination_path(cls, v):
@@ -95,11 +100,23 @@ class MoveItemRequest(BaseModel):
             raise ValueError("Destination path cannot be empty")
         return v.strip()
     
+    @validator("new_name")
+    def validate_new_name(cls, v):
+        """Validate new name if provided."""
+        if v is not None:
+            v = v.strip()
+            if not v:
+                return None
+            if any(char in v for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']):
+                raise ValueError(f"Name cannot contain: {', '.join(['/', '\\', ':', '*', '?', '\"', '<', '>', '|'])}")
+        return v
+    
     class Config:
         json_schema_extra = {
             "example": {
                 "source_path": "documents/file.txt",
-                "destination_path": "documents/archive"
+                "destination_path": "documents/archive",
+                "new_name": "renamed_file.txt"
             }
         }
 

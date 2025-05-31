@@ -1374,8 +1374,6 @@ class FileManager {
         // Set item info
         document.getElementById('moveItemIcon').className = icon;
         document.getElementById('moveItemName').textContent = name;
-        document.getElementById('moveNewName').value = '';
-        document.getElementById('moveNewName').disabled = false; // Enable for single items
         document.getElementById('copyInsteadOfMove').checked = false;
         
         // Store current item data
@@ -1540,7 +1538,6 @@ class FileManager {
     async moveItem(e) {
         e.preventDefault();
         
-        const newName = document.getElementById('moveNewName').value.trim();
         const isCopy = document.getElementById('copyInsteadOfMove').checked;
         const destinationPath = this.moveCurrentPath;
         
@@ -1594,8 +1591,7 @@ class FileManager {
                     },
                     body: JSON.stringify({
                         source_path: this.moveItemData.path,
-                        destination_path: destinationPath,
-                        new_name: newName || undefined
+                        destination_path: destinationPath
                     })
                 });
                 
@@ -1647,8 +1643,6 @@ class FileManager {
         // Set item info for multiple items
         document.getElementById('moveItemIcon').className = 'fas fa-files';
         document.getElementById('moveItemName').textContent = `${this.selectedItems.size} items`;
-        document.getElementById('moveNewName').value = '';
-        document.getElementById('moveNewName').disabled = true; // Can't rename multiple items
         document.getElementById('copyInsteadOfMove').checked = false;
         
         // Store bulk move data

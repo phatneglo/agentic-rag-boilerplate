@@ -6,14 +6,19 @@ Uses the existing object_storage_service without interfering with file manager o
 """
 
 import time
+import re
+import uuid
 from datetime import datetime, timedelta
+from pathlib import Path
 from typing import List, Dict, Tuple
 from fastapi import UploadFile, HTTPException
 
+from app.core.config import get_settings
 from app.core.logging_config import get_logger
 from app.services.object_storage_service import object_storage_service
 from app.utils.exceptions import ObjectStorageError
 
+settings = get_settings()
 logger = get_logger(__name__)
 
 
@@ -22,6 +27,54 @@ class SimpleFileService:
     
     def __init__(self):
         self.storage = object_storage_service
+        self.folder_structure = settings.upload_folder_structure
+    
+    def _clean_filename(self, filename: str) -> str:
+        """
+        Clean filename while preserving extension.
+        Removes special characters and replaces spaces with underscores.
+        """
+        if not filename:
+            return f"unnamed_{uuid.uuid4().hex[:8]}"
+        
+        # Get file extension
+        path = Path(filename)
+        name_part = path.stem
+        extension = path.suffix
+        
+        # Clean the name part
+        # Remove or replace special characters
+        clean_name = re.sub(r'[^\w\s-]', '', name_part)  # Remove special chars except word chars, spaces, hyphens
+        clean_name = re.sub(r'[-\s]+', '_', clean_name)  # Replace spaces and hyphens with underscores
+        clean_name = clean_name.strip('_')  # Remove leading/trailing underscores
+        
+        # Ensure we have a valid name
+        if not clean_name:
+            clean_name = f"file_{uuid.uuid4().hex[:8]}"
+        
+        # Add timestamp to make it unique
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        return f"{timestamp}_{clean_name}{extension.lower()}"
+    
+    def _get_upload_path(self) -> str:
+        """Generate upload path based on folder structure setting."""
+        now = datetime.now()
+        
+        if self.folder_structure == "year-month-day":
+            date_path = now.strftime("%Y/%m/%d")
+        elif self.folder_structure == "year-month":
+            date_path = now.strftime("%Y/%m")
+        elif self.folder_structure == "year":
+            date_path = now.strftime("%Y")
+        else:  # flat
+            date_path = ""
+        
+        # Always start with 'uploads' folder
+        if date_path:
+            return f"uploads/{date_path}"
+        else:
+            return "uploads"
     
     async def upload_multiple_files(
         self,
@@ -30,11 +83,11 @@ class SimpleFileService:
         file_metadata: Dict = None
     ) -> Tuple[List[Dict], List[Dict]]:
         """
-        Upload multiple files to object storage.
+        Upload multiple files to object storage with organized structure.
         
         Args:
             files: List of files to upload
-            folder_structure: Optional folder structure (defaults to root)
+            folder_structure: Optional override (ignored, uses settings)
             file_metadata: Optional metadata (not used in simple implementation)
         
         Returns:
@@ -43,13 +96,25 @@ class SimpleFileService:
         results = []
         errors = []
         
-        # Use default folder or root
-        upload_path = folder_structure or ""
+        # Use organized upload path based on settings
+        upload_path = self._get_upload_path()
         
         for file in files:
             try:
+                # Store original filename
+                original_filename = file.filename
+                
+                # Generate clean filename
+                clean_filename = self._clean_filename(original_filename)
+                
+                # Temporarily change file.filename for upload
+                file.filename = clean_filename
+                
                 # Upload single file using existing method
                 result = await self.storage.upload_file(file, upload_path)
+                
+                # Restore original filename for reference
+                file.filename = original_filename
                 
                 # Generate public URL (signed URL with long expiration)
                 try:
@@ -60,41 +125,49 @@ class SimpleFileService:
                 
                 # Convert to expected format with all required fields
                 file_info = {
-                    "file_path": result["path"],  # Required: Path in object storage
-                    "original_filename": file.filename,  # Required: Original filename
+                    "file_path": result["path"],  # Required: Path in object storage (with clean filename)
+                    "original_filename": original_filename,  # Required: Original filename from user
                     "public_url": public_url,  # Required: Public URL to access file
                     "content_type": file.content_type or "application/octet-stream",  # Required: MIME type
                     "size": result["size"],  # Required: File size in bytes
                     "file_metadata": {  # Optional: Additional metadata
-                        "original_filename": file.filename,
+                        "original_filename": original_filename,
+                        "clean_filename": clean_filename,
                         "uploaded_at": datetime.utcnow().isoformat(),
                         "upload_path": upload_path,
-                        "size_formatted": result["size_formatted"]
+                        "folder_structure": self.folder_structure,
+                        "size_formatted": result["size_formatted"],
+                        "content_type": file.content_type or "application/octet-stream"
                     }
                 }
                 results.append(file_info)
                 
-                logger.info(f"Successfully uploaded file: {file.filename}")
+                logger.info(
+                    f"Successfully uploaded file: {original_filename} -> {result['path']}",
+                    original_filename=original_filename,
+                    clean_filename=clean_filename,
+                    upload_path=upload_path
+                )
                 
             except HTTPException as e:
                 error_dict = {
-                    "filename": file.filename,
+                    "filename": original_filename,
                     "error": e.detail,
                     "status_code": e.status_code,
                     "timestamp": datetime.utcnow().isoformat()
                 }
                 errors.append(error_dict)
-                logger.error(f"Failed to upload {file.filename}: {e.detail}")
+                logger.error(f"Failed to upload {original_filename}: {e.detail}")
                 
             except Exception as e:
                 error_dict = {
-                    "filename": file.filename,
+                    "filename": original_filename,
                     "error": str(e),
                     "status_code": 500,
                     "timestamp": datetime.utcnow().isoformat()
                 }
                 errors.append(error_dict)
-                logger.error(f"Unexpected error uploading {file.filename}: {str(e)}")
+                logger.error(f"Unexpected error uploading {original_filename}: {str(e)}")
         
         return results, errors
     

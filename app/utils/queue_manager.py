@@ -50,11 +50,10 @@ class QueueManager(LoggerMixin):
         """Get or create a queue instance."""
         if queue_name not in self._queues:
             try:
-                connection = await self.get_redis_client()
-                self._queues[queue_name] = Queue(
-                    queue_name,
-                    connection={"connection": connection}
-                )
+                # BullMQ Python API - no connection parameter needed
+                # It will use default Redis connection (localhost:6379)
+                # For custom connection, we need to set environment variables or use different approach
+                self._queues[queue_name] = Queue(queue_name)
                 self.logger.info("Queue created", queue_name=queue_name)
             except Exception as e:
                 self.logger.error(
@@ -77,24 +76,19 @@ class QueueManager(LoggerMixin):
         try:
             queue = await self.get_queue(queue_name)
             
-            # Default job options
+            # Default job options for BullMQ Python
             job_options = {
                 "attempts": settings.max_retries,
-                "backoff": {
-                    "type": "exponential",
-                    "delay": 2000,
-                },
-                "removeOnComplete": 100,
-                "removeOnFail": 50,
+                "delay": 0,  # No delay by default
             }
             
             # Merge with provided options
             if options:
                 job_options.update(options)
             
-            # Add job to queue
+            # Add job to queue - BullMQ Python API
             job = await queue.add(job_name, job_data, job_options)
-            job_id = job.id
+            job_id = str(job.id) if hasattr(job, 'id') else str(job)
             
             self.logger.info(
                 "Job added to queue",

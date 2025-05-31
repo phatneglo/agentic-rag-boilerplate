@@ -33,7 +33,7 @@ class DocumentConverterWorker:
     async def setup(self):
         """Setup Redis connection and worker."""
         try:
-            # Create Redis connection
+            # Create Redis connection for health checks
             self.redis_connection = redis.Redis(
                 host=settings.redis_host,
                 port=settings.redis_port,
@@ -46,18 +46,15 @@ class DocumentConverterWorker:
             await self.redis_connection.ping()
             logger.info("Redis connection established for document converter worker")
             
-            # Create worker
+            # Create worker - BullMQ Python API
             self.worker = Worker(
                 settings.queue_names["document_converter"],
                 self.process_job,
-                connection={"connection": self.redis_connection},
-                concurrency=settings.worker_concurrency,
             )
             
             logger.info(
                 "Document converter worker initialized",
-                queue_name=settings.queue_names["document_converter"],
-                concurrency=settings.worker_concurrency
+                queue_name=settings.queue_names["document_converter"]
             )
             
         except Exception as e:

@@ -20,6 +20,8 @@ from app.api.routes.document_routes import router as document_router
 from app.api.routes.file_routes import upload_router
 from app.api.routes.file_manager import router as file_manager_router
 from app.api.routes.chat_routes import router as chat_router
+from app.api.routes.document_processing_routes import router as document_processing_router
+from app.api.routes.test_routes import router as test_router
 from app.utils.queue_manager import queue_manager
 from app.models.responses.document_responses import HealthCheckResponse, ErrorResponse
 from app import __version__
@@ -379,6 +381,19 @@ app.include_router(
     tags=["chat"]
 )
 
+# Include document processing pipeline router
+app.include_router(
+    document_processing_router,
+    tags=["Document Processing Pipeline"]
+)
+
+# Include test router
+app.include_router(
+    test_router,
+    prefix=f"/api/{settings.api_version}",
+    tags=["Test Workers"]
+)
+
 # Include WebSocket handler
 from app.api.routes.websocket_handler import websocket_endpoint
 
@@ -449,6 +464,12 @@ async def api_info() -> Dict[str, Any]:
             "index_typesense": f"/api/{settings.api_version}/documents/index/typesense",
             "index_qdrant": f"/api/{settings.api_version}/documents/index/qdrant",
             "sync_document": f"/api/{settings.api_version}/documents/sync",
+            "document_processing": {
+                "process": f"/api/{settings.api_version}/document-processing/process",
+                "status": f"/api/{settings.api_version}/document-processing/status/{{document_id}}",
+                "process_file_path": f"/api/{settings.api_version}/document-processing/process-file-path",
+                "health": f"/api/{settings.api_version}/document-processing/health"
+            },
             "files": {
                 "upload": f"/api/{settings.api_version}/files/upload",
                 "get_signed_url": f"/api/{settings.api_version}/files/get-signed-url"
@@ -470,6 +491,11 @@ async def api_info() -> Dict[str, Any]:
             "chat": {
                 "ui": "/chat",
                 "api": f"/api/{settings.api_version}/chat"
+            },
+            "test": {
+                "worker": f"/api/{settings.api_version}/test/worker",
+                "worker_status": f"/api/{settings.api_version}/test/worker/status",
+                "health": f"/api/{settings.api_version}/test/health"
             }
         }
     }

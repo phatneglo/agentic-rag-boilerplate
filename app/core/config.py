@@ -218,10 +218,12 @@ class Settings(BaseSettings):
         """Get queue names with prefix."""
         return {
             "document_converter": f"{self.queue_prefix}:document_converter",
+            "metadata_extractor": f"{self.queue_prefix}:metadata_extractor",
             "typesense_indexer": f"{self.queue_prefix}:typesense_indexer",
             "qdrant_indexer": f"{self.queue_prefix}:qdrant_indexer",
             "document_sync": f"{self.queue_prefix}:document_sync",
             "file_manager": f"{self.queue_prefix}:file_manager",
+            "test_worker": f"{self.queue_prefix}:test_worker",
         }
     
     class Config:

@@ -266,3 +266,5 @@ htmlcov/
 
 # Profiling
 *.prof 
+
+processed_documents/

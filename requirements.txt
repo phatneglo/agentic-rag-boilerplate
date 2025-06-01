@@ -30,11 +30,16 @@ orjson==3.10.12
 # Type hints and validation
 typing-extensions==4.12.2
 
-# Document processing (for conversion service)
-python-magic==0.4.27
-pypdf2==3.0.1
+# Document processing with Marker (latest version)
+marker-pdf==1.7.3
+pillow>=10.0.0
+
+# Document processing fallback libraries
 python-docx==1.1.2
-markdown==3.7
+python-pptx==0.6.23
+html2text==2024.2.26
+ebooklib==0.18
+beautifulsoup4==4.12.3
 
 # Vector database clients
 qdrant-client==1.12.1
@@ -50,7 +55,6 @@ pytest==8.3.4
 pytest-asyncio==0.25.0
 pytest-cov==6.0.0
 pytest-mock==3.14.0
-httpx==0.28.1  # For testing HTTP clients
 
 # Development dependencies
 black==24.10.0
@@ -76,8 +80,6 @@ tqdm==4.67.1
 python-multipart==0.0.20
 boto3==1.35.95
 botocore==1.35.95
-
-# Additional utilities
 aiofiles==24.1.0
 
 # LangGraph and Agent dependencies
@@ -90,17 +92,32 @@ langchain-community==0.3.30
 # OpenAI API
 openai==1.57.2
 
-# Agent utilities
-pydantic>=2.0
-typing-extensions
-uuid
+# LlamaIndex Core and Integrations (latest versions)
+llama-index==0.12.9
+llama-index-vector-stores-qdrant==0.4.1
+llama-index-embeddings-openai==0.3.2
+llama-index-llms-openai==0.3.6
 
-# Additional dependencies for artifacts
-matplotlib>=3.7.0
-plotly>=5.17.0
+# Document processing utilities
+python-magic==0.4.27
+markdown==3.7
+
+# Structured Data Extraction
+instructor==1.10.1
+
+# Data processing
 pandas>=2.0.0
 numpy>=1.24.0
-pillow>=10.0.0
 
-# WebSocket support (if not already present)
-websockets>=12.0 
+# PDF text extraction
+PyPDF2>=3.0.0
+
+# Visualization (if needed)
+matplotlib>=3.7.0
+plotly>=5.17.0
+
+# WebSocket support
+websockets>=12.0
+
+# UUID utilities
+uuid 

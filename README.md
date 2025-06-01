@@ -1,18 +1,26 @@
-# Agentic RAG - AI Chat System
+# Agentic RAG - AI Document Processing & Chat System
 
-A complete AI chat system with modular architecture, featuring document processing, file management, and an interactive chat interface with artifacts support.
+A complete AI-powered document processing and chat system with a sophisticated 4-step pipeline for document conversion, metadata extraction, search indexing, and RAG (Retrieval-Augmented Generation) capabilities.
 
 ## 🚀 Features
 
-### 📊 Dashboard
-- **AdminLTE-themed dashboard** with real-time system monitoring
-- **API health monitoring** with live status updates
-- **File storage metrics** and usage statistics
-- **Navigation between modules** (Dashboard, Chat, File Manager)
+### 📄 Document Processing Pipeline
+- **4-Step Processing Pipeline** with BullMQ queue management:
+  1. **Document Conversion**: PDF/DOCX/TXT/HTML → Markdown using Marker
+  2. **Metadata Extraction**: AI-powered metadata extraction using LlamaIndex
+  3. **Search Indexing**: Auto-embedding and indexing to Typesense
+  4. **RAG Integration**: Vector storage in Qdrant for intelligent retrieval
+
+### 🔍 Search & RAG Capabilities
+- **Typesense Search**: Fast, typo-tolerant search with auto-embedding (OpenAI text-embedding-3-small)
+- **Qdrant Vector Store**: Hybrid search support with dense and sparse vectors
+- **LlamaIndex Integration**: Advanced document chunking and retrieval
+- **Real-time Processing**: Background workers for parallel document processing
 
 ### 💬 AI Chat Interface
 - **Claude-inspired design** with modern, responsive UI
 - **Real-time WebSocket communication** for instant responses
+- **RAG-powered responses** using processed documents
 - **Artifacts system** supporting:
   - Code snippets with syntax highlighting (Prism.js)
   - Mermaid diagrams and flowcharts
@@ -21,25 +29,39 @@ A complete AI chat system with modular architecture, featuring document processi
 - **File upload support** with drag-and-drop functionality
 - **Chat history** with session management
 - **Export capabilities** (JSON, TXT formats)
-- **User preferences** for customization
-- **Responsive design** for mobile and desktop
 
 ### 📁 File Manager
 - **Web-based file browser** with grid and list views
 - **Upload/download** with progress tracking
+- **Document processing** integration
 - **Folder management** (create, rename, move, delete)
 - **Search functionality** across files and folders
 - **Drag-and-drop** file operations
-- **Context menus** for file actions
-- **Breadcrumb navigation**
 
-### 🔧 Backend API
-- **FastAPI-based REST API** with automatic documentation
-- **WebSocket support** for real-time chat
-- **File upload/processing** endpoints
-- **Health monitoring** and metrics
-- **Redis integration** for queue management
-- **Structured logging** with detailed request tracking
+### 📊 Dashboard
+- **AdminLTE-themed dashboard** with real-time system monitoring
+- **API health monitoring** with live status updates
+- **Processing queue status** and worker monitoring
+- **Document processing metrics** and statistics
+- **File storage metrics** and usage statistics
+
+## 🏗️ System Architecture
+
+### Document Processing Pipeline
+```
+Upload → Queue → Worker 1 → Worker 2 → Worker 3 → Worker 4
+  ↓        ↓         ↓         ↓         ↓         ↓
+File → Redis → Convert → Extract → Index → RAG
+             (Marker)  (LlamaIndex) (Typesense) (Qdrant)
+```
+
+### Service Stack
+- **FastAPI** - High-performance async API server
+- **Redis** - Queue management and caching
+- **Typesense** - Search engine with auto-embedding
+- **Qdrant** - Vector database for RAG
+- **BullMQ** - Background job processing
+- **LlamaIndex** - Document processing and RAG framework
 
 ## 📁 Project Structure
 
@@ -51,38 +73,47 @@ agentic-rag/
 │   │   ├── document_routes.py   # Document processing
 │   │   ├── file_manager.py      # File management API
 │   │   └── file_routes.py       # File upload/download
+│   ├── workers/                 # Background processing workers
+│   │   ├── simple_document_converter_worker.py  # Step 1: Conversion
+│   │   ├── metadata_extractor_worker.py         # Step 2: Metadata
+│   │   ├── typesense_indexer_worker.py          # Step 3: Search indexing
+│   │   └── qdrant_indexer_worker.py             # Step 4: RAG indexing
+│   ├── services/                # Business logic services
+│   │   ├── document_converter_service.py        # Document conversion
+│   │   ├── typesense_indexer_service.py         # Typesense operations
+│   │   ├── qdrant_indexer_service.py            # Qdrant operations
+│   │   └── object_storage_service.py            # File storage
 │   ├── core/                    # Core configuration
 │   ├── models/                  # Pydantic models
 │   └── main.py                  # Main FastAPI application
 ├── static/modules/              # Frontend modules
 │   ├── chat/                    # AI Chat Interface
-│   │   ├── chat.html           # Main chat UI
-│   │   ├── css/chat.css        # Claude-inspired styling
-│   │   └── js/                 # Modular JavaScript
-│   │       ├── chat-app.js     # Main application coordinator
-│   │       ├── chat-websocket.js # WebSocket management
-│   │       ├── chat-artifacts.js # Artifacts system
-│   │       ├── chat-messages.js # Message handling
-│   │       └── chat-service.js  # API communication
 │   ├── dashboard/               # Main Dashboard
-│   │   ├── dashboard.html      # AdminLTE dashboard
-│   │   ├── css/dashboard.css   # Dashboard styling
-│   │   └── js/dashboard.js     # Dashboard functionality
 │   └── file-manager/           # File Manager
-│       ├── index.html          # File browser UI
-│       ├── css/                # File manager styles
-│       └── js/                 # File management logic
+├── start_clean.sh              # Clean installation script
+├── start_server.sh             # Server-only startup
+├── start_server_and_workers.sh # Full system startup
 └── requirements.txt            # Python dependencies
 ```
 
 ## 🛠️ Installation & Setup
 
 ### Prerequisites
-- Python 3.8+
-- Redis (for queue management)
-- Node.js (optional, for development)
+- Python 3.10+
+- Redis 6.0+
+- Typesense 0.25.0+
+- Qdrant 1.7.0+
+- OpenAI API Key (for embeddings)
 
-### Installation
+### Quick Start
+
+#### Option 1: Clean Installation
+```bash
+./start_clean.sh
+```
+This will guide you through a complete reset and installation.
+
+#### Option 2: Manual Installation
 
 1. **Clone the repository**
    ```bash
@@ -90,155 +121,269 @@ agentic-rag/
    cd agentic-rag
    ```
 
-2. **Install Python dependencies**
+2. **Create and activate virtual environment**
+   ```bash
+   python3 -m venv venv
+   source venv/bin/activate
+   ```
+
+3. **Install Python dependencies**
    ```bash
    pip install -r requirements.txt
    ```
 
-3. **Start Redis server**
+4. **Set up environment variables**
    ```bash
+   cp .env.example .env
+   # Edit .env with your OpenAI API key and other settings
+   ```
+
+5. **Start required services**
+   ```bash
+   # Redis
    redis-server
+   
+   # Typesense
+   typesense-server --data-dir=/tmp/typesense-data --api-key=xyz --enable-cors
+   
+   # Qdrant
+   docker run -p 6333:6333 -v $(pwd)/qdrant_storage:/qdrant/storage qdrant/qdrant
    ```
 
-4. **Run the application**
-   ```bash
-   python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
-   ```
+## 🚀 Running the Application
 
-5. **Access the application**
-   - Dashboard: http://localhost:8000/
-   - Chat Interface: http://localhost:8000/chat
-   - File Manager: http://localhost:8000/file-manager
-   - API Documentation: http://localhost:8000/docs
+### Option 1: Server Only
+```bash
+./start_server.sh
+```
+Starts only the FastAPI server (for development/testing).
+
+### Option 2: Full System (Recommended)
+```bash
+./start_server_and_workers.sh
+```
+Starts the FastAPI server + all 4 background workers for complete functionality.
+
+### Manual Startup
+```bash
+# Activate virtual environment
+source venv/bin/activate
+
+# Start the main server
+python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+
+# In separate terminals, start workers:
+python -m app.workers.simple_document_converter_worker
+python -m app.workers.metadata_extractor_worker
+python -m app.workers.typesense_indexer_worker
+python -m app.workers.qdrant_indexer_worker
+```
+
+## 🌐 Access Points
+
+- **Dashboard**: http://localhost:8000/
+- **AI Chat**: http://localhost:8000/chat
+- **File Manager**: http://localhost:8000/file-manager
+- **API Documentation**: http://localhost:8000/docs
+- **Typesense**: http://localhost:8108/
+- **Qdrant**: http://localhost:6333/dashboard
 
 ## 💻 Usage
 
-### Dashboard
-1. Navigate to http://localhost:8000/
-2. Monitor system health and metrics
-3. Use the sidebar to switch between modules
-4. View real-time API status and file storage usage
+### Document Processing Workflow
+1. **Upload Documents**: Use File Manager or API to upload PDF/DOCX/TXT/HTML files
+2. **Automatic Processing**: Files are queued and processed through 4 steps:
+   - Converted to Markdown using Marker
+   - Metadata extracted using LlamaIndex AI
+   - Indexed to Typesense with auto-embeddings
+   - Stored in Qdrant for RAG capabilities
+3. **Search & Query**: Use Typesense for fast search or chat for RAG queries
 
-### AI Chat
-1. Click "AI Chat" in the dashboard or visit http://localhost:8000/chat
-2. Type messages in the input field at the bottom
-3. Use suggestion cards for quick interactions
-4. Upload files by clicking the attachment button or dragging files
-5. View generated artifacts (code, diagrams) in the sidebar
-6. Export chat history using the history button
+### AI Chat with RAG
+1. Navigate to the Chat interface
+2. Upload documents or reference existing processed documents
+3. Ask questions about your documents
+4. Get AI responses enhanced with relevant document context
+5. View source citations and document excerpts
 
-### File Manager
-1. Click "File Manager" in the dashboard or visit http://localhost:8000/file-manager
-2. Browse files and folders using the grid or list view
-3. Upload files by clicking "Upload" or dragging files to the interface
-4. Create folders, rename files, and manage your documents
-5. Use the search bar to find specific files
+### Search Interface
+1. Use Typesense dashboard or API for direct search
+2. Query by title, description, tags, or content
+3. Get ranked results with auto-embedding similarity
 
 ## 🔌 API Endpoints
 
+### Document Processing API
+- `POST /api/v1/files/upload` - Upload and queue documents for processing
+- `GET /api/v1/documents/status/{document_id}` - Check processing status
+- `GET /api/v1/documents/search` - Search processed documents
+
 ### Chat API
-- `GET /api/v1/chat/preferences` - Get user preferences
-- `PUT /api/v1/chat/preferences` - Update user preferences
-- `POST /api/v1/chat/message` - Send chat message (HTTP fallback)
-- `GET /api/v1/chat/history` - Get chat history
-- `POST /api/v1/chat/sessions` - Save chat session
-- `GET /api/v1/chat/sessions` - List chat sessions
+- `POST /api/v1/chat/message` - Send chat message with RAG
 - `WS /ws/chat` - WebSocket endpoint for real-time chat
+- `GET /api/v1/chat/history` - Get chat history
 
 ### File Management API
 - `GET /api/v1/file-manager/` - List files and folders
 - `POST /api/v1/file-manager/upload` - Upload files
-- `POST /api/v1/file-manager/folder` - Create folder
 - `DELETE /api/v1/file-manager/item` - Delete files/folders
-- `PUT /api/v1/file-manager/rename` - Rename items
-- `PUT /api/v1/file-manager/move` - Move items
 
 ### System API
 - `GET /health` - System health check
-- `GET /api` - API information
+- `GET /api/v1/system/status` - Processing queue status
 
-## 🏗️ Architecture
+## ⚙️ Configuration
 
-### Modular Frontend Design
-- **Separation of concerns** with dedicated modules for each feature
-- **Component-based architecture** for easy maintenance
-- **Event-driven communication** between modules
-- **Responsive design** with Bootstrap 5
+### Environment Variables
+```bash
+# OpenAI Configuration
+OPENAI_API_KEY=your_openai_api_key
 
-### Backend Architecture
-- **FastAPI** for high-performance async API
-- **Pydantic** for data validation and serialization
-- **WebSocket** support for real-time communication
-- **Redis** for queue management and caching
-- **Structured logging** for monitoring and debugging
+# Database URLs
+REDIS_URL=redis://localhost:6379
+TYPESENSE_URL=http://localhost:8108
+QDRANT_URL=http://localhost:6333
 
-### Real-time Features
-- **WebSocket communication** for instant chat responses
-- **Live dashboard updates** with health monitoring
-- **File upload progress** tracking
-- **Connection status** indicators
+# API Keys
+TYPESENSE_API_KEY=xyz
+QDRANT_API_KEY=your_qdrant_key
 
-## 🔧 Customization
+# Processing Configuration
+MAX_RETRIES=3
+WORKER_CONCURRENCY=4
+CHUNK_SIZE=512
+EMBEDDING_MODEL=text-embedding-3-small
+```
 
-### Adding New Chat Features
-1. Extend `chat-service.js` for new API endpoints
-2. Add message types in `chat-websocket.js`
-3. Implement UI components in `chat-app.js`
-4. Add backend endpoints in `chat_routes.py`
+### Service Configuration
 
-### Extending File Manager
-1. Add new file operations in `file-operations.js`
-2. Implement backend handlers in `file_manager.py`
-3. Update UI components in `ui-components.js`
+#### Typesense Setup
+```bash
+# Auto-embedding with OpenAI
+curl -X POST 'http://localhost:8108/collections' \
+  -H 'X-TYPESENSE-API-KEY: xyz' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "name": "documents",
+    "enable_nested_fields": true,
+    "fields": [
+      {"name": "title", "type": "string"},
+      {"name": "description", "type": "string"},
+      {"name": "tags", "type": "string[]"},
+      {"name": "embedding", "type": "float[]", "embed": {"from": ["title", "description"], "model_config": {"model_name": "openai/text-embedding-3-small"}}}
+    ]
+  }'
+```
 
-### Dashboard Customization
-1. Modify `dashboard.css` for styling
-2. Add new widgets in `dashboard.js`
-3. Extend health monitoring in `main.py`
+#### Qdrant Collection Setup
+```bash
+# Named vectors for hybrid search
+curl -X PUT 'http://localhost:6333/collections/documents' \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "vectors": {
+      "text-dense": {"size": 1536, "distance": "Cosine"},
+      "text-sparse": {"size": 1024, "distance": "Dot"}
+    }
+  }'
+```
+
+## 🔧 Processing Pipeline Details
+
+### Step 1: Document Conversion
+- **Input**: PDF, DOCX, TXT, HTML files
+- **Output**: Clean Markdown text
+- **Technology**: Marker (PDFs), python-docx (DOCX), BeautifulSoup (HTML)
+- **Features**: OCR support, table preservation, image handling
+
+### Step 2: Metadata Extraction
+- **Input**: Markdown content
+- **Output**: Structured metadata (title, description, tags, summary)
+- **Technology**: LlamaIndex with OpenAI GPT models
+- **Features**: AI-powered content analysis, automatic tagging
+
+### Step 3: Typesense Indexing
+- **Input**: Metadata JSON
+- **Output**: Searchable index with embeddings
+- **Technology**: Typesense with OpenAI embeddings
+- **Features**: Auto-embedding, typo tolerance, faceted search
+
+### Step 4: Qdrant RAG Integration
+- **Input**: Markdown content + metadata
+- **Output**: Vector embeddings for RAG
+- **Technology**: LlamaIndex + Qdrant
+- **Features**: Document chunking, hybrid search, similarity retrieval
 
 ## 🚧 Development Status
 
 ### ✅ Completed Features
-- Complete chat interface with artifacts
-- Real-time WebSocket communication
-- File upload and management
-- Dashboard with system monitoring
-- Modular frontend architecture
-- Backend API with documentation
-- Health monitoring and logging
+- [x] 4-step document processing pipeline
+- [x] BullMQ queue management with Redis
+- [x] Typesense integration with auto-embedding
+- [x] Qdrant vector storage with LlamaIndex
+- [x] Worker-based background processing
+- [x] File upload and storage management
+- [x] RAG-powered chat interface
+- [x] Real-time WebSocket communication
+- [x] System health monitoring
+- [x] Complete test suite
 
-### 🔄 Ready for LLM Integration
-The system is **production-ready** and designed for easy LLM integration:
+### 🔧 In Progress
+- [ ] Hybrid search implementation (pending PyTorch 2.6+)
+- [ ] Advanced document preprocessing
+- [ ] Multi-tenant support
+- [ ] Performance optimizations
 
-1. **Replace mock responses** in `generate_ai_response()` function
-2. **Add your LLM service** (OpenAI, Anthropic, local models, etc.)
-3. **Customize artifact types** based on your LLM capabilities
-4. **Configure authentication** if needed
+### 📋 Roadmap
+- [ ] Document versioning
+- [ ] Advanced analytics dashboard
+- [ ] Custom embedding models
+- [ ] Batch processing optimization
+- [ ] Multi-language support
 
-### 🔮 Future Enhancements
-- Voice input integration
-- Advanced file processing (OCR, document parsing)
-- User authentication and multi-tenancy
-- Plugin system for custom artifacts
-- Advanced search with semantic similarity
-- Real-time collaboration features
+## 🧪 Testing
 
-## 📝 License
+### Run Pipeline Tests
+```bash
+# Test complete pipeline
+python test_complete_pipeline.py
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+# Test individual components
+python -m pytest tests/
+
+# Check service health
+curl http://localhost:8000/health
+```
+
+### Verify Processing
+```bash
+# Check Typesense documents
+curl 'http://localhost:8108/collections/documents/documents/search?q=*'
+
+# Check Qdrant points
+curl 'http://localhost:6333/collections/documents/points/count'
+
+# Monitor Redis queues
+redis-cli keys "*bull*"
+```
 
 ## 🤝 Contributing
 
 1. Fork the repository
-2. Create a feature branch
-3. Make your changes
-4. Add tests if applicable
-5. Submit a pull request
+2. Create your feature branch (`git checkout -b feature/amazing-feature`)
+3. Commit your changes (`git commit -m 'Add amazing feature'`)
+4. Push to the branch (`git push origin feature/amazing-feature`)
+5. Open a Pull Request
 
-## 📞 Support
+## 📄 License
 
-For questions, issues, or feature requests, please open an issue on GitHub.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
----
+## 🙏 Acknowledgments
 
-**Built with ❤️ using FastAPI, WebSockets, and modern web technologies.** 
+- **LlamaIndex** for the RAG framework
+- **Typesense** for fast search capabilities
+- **Qdrant** for vector storage
+- **Marker** for PDF processing
+- **FastAPI** for the web framework
+- **BullMQ** for queue management 

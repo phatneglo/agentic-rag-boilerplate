@@ -7,7 +7,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any
 
-from fastapi import FastAPI, Request, status, WebSocket
+from fastapi import FastAPI, Request, status, WebSocket, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
@@ -405,6 +405,18 @@ async def chat_websocket(websocket: WebSocket):
 # Mount static files for file manager UI
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
+# Favicon endpoint
+@app.get("/favicon.ico")
+async def favicon():
+    """Serve favicon."""
+    # Return a simple response or redirect to an icon
+    return JSONResponse(content={"status": "no favicon"}, status_code=204)
+
+@app.head("/favicon.ico") 
+async def favicon_head():
+    """Handle HEAD requests for favicon."""
+    return Response(status_code=204)
+
 # Dashboard UI endpoint - Main landing page
 @app.get(
     "/",
@@ -435,8 +447,18 @@ async def file_manager_ui():
     description="Serve the AI chat web interface"
 )
 async def chat_ui():
-    """Serve the AI chat web interface."""
+    """Serve the AI chat interface."""
     return FileResponse("static/modules/chat/chat.html")
+
+@app.get(
+    "/file-browser",
+    tags=["file-browser"],
+    summary="File Browser Interface",
+    description="Serve the Typesense-powered knowledge base file browser"
+)
+async def file_browser_ui():
+    """Serve the File Browser interface."""
+    return FileResponse("static/modules/file-browser/file-browser.html")
 
 # API Information endpoint
 @app.get(

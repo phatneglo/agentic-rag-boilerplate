@@ -1,0 +1,87 @@
+/* File Browser - Minimal Custom Styles for Bootstrap */
+
+/* Custom color classes not available in Bootstrap */
+.bg-purple {
+    background-color: #6f42c1 !important;
+}
+
+/* Search mode toggle styling */
+.search-mode-toggle .btn-group .btn {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+    border-width: 1px;
+}
+
+.search-mode-toggle .btn-check:checked + .btn-outline-primary {
+    background-color: var(--bs-primary);
+    border-color: var(--bs-primary);
+    color: white;
+}
+
+.search-mode-toggle .btn-check:checked + .btn-outline-success {
+    background-color: var(--bs-success);
+    border-color: var(--bs-success);
+    color: white;
+}
+
+/* Hover effects for filter options */
+.hover-bg-light:hover {
+    background-color: #f8f9fa !important;
+}
+
+/* Custom cursor pointer class */
+.cursor-pointer {
+    cursor: pointer;
+}
+
+/* Tag badge hover effect */
+.tag-badge:hover {
+    background-color: var(--bs-primary) !important;
+    color: white !important;
+    border-color: var(--bs-primary) !important;
+}
+
+/* Search highlight styling */
+.search-highlight {
+    background-color: #fff3cd;
+    padding: 0.125rem 0.25rem;
+    border-radius: 0.125rem;
+    font-weight: 600;
+}
+
+/* Filter collapse icon animation */
+.collapse-icon {
+    transition: transform 0.2s ease;
+}
+
+.collapsed .collapse-icon {
+    transform: rotate(-90deg);
+}
+
+/* Document card hover effect */
+.document-card:hover {
+    transform: translateY(-2px);
+    transition: transform 0.2s ease;
+}
+
+/* Custom gap utilities if needed */
+.gap-3 {
+    gap: 1rem !important;
+}
+
+/* Notification positioning */
+.position-fixed {
+    position: fixed !important;
+}
+
+/* Ensure proper spacing for mobile */
+@media (max-width: 768px) {
+    .gap-2 {
+        gap: 0.5rem !important;
+    }
+    
+    .search-mode-toggle .btn-group .btn {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+} 

@@ -5,6 +5,9 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Agentic RAG - Dashboard</title>
     
+    <!-- Favicon -->
+    <link rel="icon" type="image/x-icon" href="/favicon.ico">
+    
     <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
     
@@ -84,6 +87,12 @@
                             <a href="#" class="nav-link" id="file-manager-nav">
                                 <i class="nav-icon fas fa-folder-open"></i>
                                 <p>File Manager</p>
+                            </a>
+                        </li>
+                        <li class="nav-item">
+                            <a href="#" class="nav-link" id="file-browser-nav">
+                                <i class="nav-icon fas fa-search"></i>
+                                <p>File Browser</p>
                             </a>
                         </li>
                         <li class="nav-header">SYSTEM</li>
@@ -197,6 +206,9 @@
                                             <button type="button" class="btn btn-outline-info" onclick="dashboard.showSection('file-manager')">
                                                 <i class="fas fa-folder-open mr-2"></i>Open File Manager
                                             </button>
+                                            <button type="button" class="btn btn-outline-warning" onclick="dashboard.showSection('file-browser')">
+                                                <i class="fas fa-search mr-2"></i>Browse Knowledge Base
+                                            </button>
                                         </div>
                                     </div>
                                 </div>
@@ -220,6 +232,270 @@
                 <iframe id="file-manager-frame" src="/static/modules/file-manager/index.html" 
                         style="width: 100%; height: calc(100vh - 60px); border: none;">
                 </iframe>
+            </div>
+
+            <!-- File Browser Content -->
+            <div id="file-browser-content" class="content d-none">
+                <!-- File Browser Header -->
+                <div class="content-header">
+                    <div class="container-fluid">
+                        <div class="row mb-2">
+                            <div class="col-sm-6">
+                                <h1 class="m-0">
+                                    <i class="fas fa-search me-2 text-primary"></i>
+                                    Knowledge Base Browser
+                                </h1>
+                            </div>
+                            <div class="col-sm-6">
+                                <ol class="breadcrumb float-sm-right">
+                                    <li class="breadcrumb-item"><a href="#">Home</a></li>
+                                    <li class="breadcrumb-item active">File Browser</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main File Browser Content -->
+                <section class="content">
+                    <div class="container-fluid">
+                        <div class="row">
+                            <!-- Sidebar Filters -->
+                            <div class="col-md-3">
+                                <div class="card">
+                                    <div class="card-header">
+                                        <h3 class="card-title">
+                                            <i class="fas fa-filter me-2"></i>Filters
+                                        </h3>
+                                        <div class="card-tools">
+                                            <button class="btn btn-tool btn-sm" id="clearFilters" title="Clear Filters">
+                                                <i class="fas fa-times"></i>
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div class="card-body p-0" style="max-height: 70vh; overflow-y: auto;">
+                                        <!-- Active Filters -->
+                                        <div id="activeFilters" class="p-3 border-bottom d-none">
+                                            <div class="mb-2">
+                                                <small class="text-muted fw-bold">Active Filters:</small>
+                                            </div>
+                                            <div id="activeFiltersList"></div>
+                                        </div>
+                                        
+                                        <!-- Document Type Filter -->
+                                        <div class="p-3 border-bottom">
+                                            <h6 class="mb-2" data-bs-toggle="collapse" data-bs-target="#typeFilter" style="cursor: pointer;">
+                                                <i class="fas fa-file-alt me-2"></i>Document Type
+                                                <i class="fas fa-chevron-down float-end"></i>
+                                            </h6>
+                                            <div class="collapse show" id="typeFilter">
+                                                <div id="typeFilterOptions" class="mt-2">
+                                                    <!-- Dynamic content -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Category Filter -->
+                                        <div class="p-3 border-bottom">
+                                            <h6 class="mb-2" data-bs-toggle="collapse" data-bs-target="#categoryFilter" style="cursor: pointer;">
+                                                <i class="fas fa-tags me-2"></i>Category
+                                                <i class="fas fa-chevron-down float-end"></i>
+                                            </h6>
+                                            <div class="collapse show" id="categoryFilter">
+                                                <div id="categoryFilterOptions" class="mt-2">
+                                                    <!-- Dynamic content -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Language Filter -->
+                                        <div class="p-3 border-bottom">
+                                            <h6 class="mb-2" data-bs-toggle="collapse" data-bs-target="#languageFilter" style="cursor: pointer;">
+                                                <i class="fas fa-globe me-2"></i>Language
+                                                <i class="fas fa-chevron-down float-end"></i>
+                                            </h6>
+                                            <div class="collapse show" id="languageFilter">
+                                                <div id="languageFilterOptions" class="mt-2">
+                                                    <!-- Dynamic content -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Authors Filter -->
+                                        <div class="p-3 border-bottom">
+                                            <h6 class="mb-2" data-bs-toggle="collapse" data-bs-target="#authorFilter" style="cursor: pointer;">
+                                                <i class="fas fa-user me-2"></i>Authors
+                                                <i class="fas fa-chevron-down float-end"></i>
+                                            </h6>
+                                            <div class="collapse" id="authorFilter">
+                                                <div id="authorFilterOptions" class="mt-2">
+                                                    <!-- Dynamic content -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Tags Filter -->
+                                        <div class="p-3">
+                                            <h6 class="mb-2" data-bs-toggle="collapse" data-bs-target="#tagsFilter" style="cursor: pointer;">
+                                                <i class="fas fa-hashtag me-2"></i>Tags
+                                                <i class="fas fa-chevron-down float-end"></i>
+                                            </h6>
+                                            <div class="collapse" id="tagsFilter">
+                                                <div id="tagsFilterOptions" class="mt-2">
+                                                    <!-- Dynamic content -->
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <!-- Main Content -->
+                            <div class="col-md-9">
+                                <!-- Search Bar -->
+                                <div class="card mb-3">
+                                    <div class="card-body">
+                                        <div class="row align-items-center">
+                                            <div class="col-lg-8 col-md-12 mb-2 mb-lg-0">
+                                                <div class="input-group">
+                                                    <input type="text" class="form-control form-control-lg" 
+                                                           id="searchInput" placeholder="Search through your knowledge base..." autocomplete="off">
+                                                    <button class="btn btn-outline-secondary" type="button" id="searchClear" style="display: none;">
+                                                        <i class="fas fa-times"></i>
+                                                    </button>
+                                                    <!-- Search Mode Button Group - moved to right -->
+                                                    <div class="btn-group" role="group">
+                                                        <button type="button" class="btn btn-primary dropdown-toggle" id="searchModeDropdown" data-bs-toggle="dropdown" aria-expanded="false">
+                                                            <i class="fas fa-search me-1"></i>
+                                                            <span id="searchModeText" class="d-none d-sm-inline">Search</span>
+                                                        </button>
+                                                        <ul class="dropdown-menu" aria-labelledby="searchModeDropdown">
+                                                            <li>
+                                                                <a class="dropdown-item" href="#" data-search-mode="normal">
+                                                                    <i class="fas fa-search me-2"></i>Search
+                                                                    <small class="text-muted d-block">Fast text-based search</small>
+                                                                </a>
+                                                            </li>
+                                                            <li>
+                                                                <a class="dropdown-item" href="#" data-search-mode="smart">
+                                                                    <i class="fas fa-brain me-2"></i>Smart Search
+                                                                    <small class="text-muted d-block">AI-powered semantic search</small>
+                                                                </a>
+                                                            </li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                            <div class="col-lg-4 col-md-12">
+                                                <div class="d-flex justify-content-end justify-content-md-center justify-content-lg-end gap-2 flex-wrap">
+                                                    <div class="btn-group" role="group">
+                                                        <input type="radio" class="btn-check" name="viewMode" id="listView" checked>
+                                                        <label class="btn btn-outline-secondary" for="listView" title="List View">
+                                                            <i class="fas fa-list"></i>
+                                                            <span class="d-none d-xl-inline ms-1">List</span>
+                                                        </label>
+                                                        <input type="radio" class="btn-check" name="viewMode" id="gridView">
+                                                        <label class="btn btn-outline-secondary" for="gridView" title="Grid View">
+                                                            <i class="fas fa-th"></i>
+                                                            <span class="d-none d-xl-inline ms-1">Grid</span>
+                                                        </label>
+                                                    </div>
+                                                    
+                                                    <div class="dropdown">
+                                                        <button class="btn btn-outline-secondary dropdown-toggle" type="button" data-bs-toggle="dropdown">
+                                                            <i class="fas fa-sort me-1"></i>
+                                                            <span class="d-none d-lg-inline">Sort</span>
+                                                        </button>
+                                                        <ul class="dropdown-menu" id="sortOptions">
+                                                            <li><a class="dropdown-item" href="#" data-sort="created_at:desc">Newest First</a></li>
+                                                            <li><a class="dropdown-item" href="#" data-sort="created_at:asc">Oldest First</a></li>
+                                                            <li><a class="dropdown-item" href="#" data-sort="updated_at:desc">Recently Updated</a></li>
+                                                            <li><a class="dropdown-item" href="#" data-sort="updated_at:asc">Least Recently Updated</a></li>
+                                                            <li><a class="dropdown-item" href="#" data-sort="word_count:desc">Longest Documents</a></li>
+                                                            <li><a class="dropdown-item" href="#" data-sort="word_count:asc">Shortest Documents</a></li>
+                                                            <li><a class="dropdown-item" href="#" data-sort="page_count:desc">Most Pages</a></li>
+                                                            <li><a class="dropdown-item" href="#" data-sort="page_count:asc">Fewest Pages</a></li>
+                                                        </ul>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Search Stats -->
+                                <div class="alert alert-info d-none" id="searchStats">
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <span>
+                                            <i class="fas fa-info-circle me-1"></i>
+                                            <span id="searchStatsText">0 documents found</span>
+                                        </span>
+                                        <div class="d-flex align-items-center gap-3">
+                                            <small class="text-muted">
+                                                <i class="fas fa-clock me-1"></i>
+                                                Search took <span id="searchTime">0</span>ms
+                                            </small>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Loading State -->
+                                <div class="card text-center d-none" id="loadingState">
+                                    <div class="card-body py-5">
+                                        <div class="spinner-border text-primary mb-3" role="status">
+                                            <span class="visually-hidden">Searching...</span>
+                                        </div>
+                                        <p class="text-muted">Searching your knowledge base...</p>
+                                    </div>
+                                </div>
+                                
+                                <!-- No Results State -->
+                                <div class="card text-center d-none" id="noResultsState">
+                                    <div class="card-body py-5">
+                                        <i class="fas fa-search text-muted mb-3" style="font-size: 3rem; opacity: 0.3;"></i>
+                                        <h4 class="text-muted">No documents found</h4>
+                                        <p class="text-muted">Try adjusting your search terms or filters</p>
+                                        <button class="btn btn-outline-primary" id="clearAllFilters">
+                                            <i class="fas fa-eraser me-2"></i>Clear All Filters
+                                        </button>
+                                    </div>
+                                </div>
+                                
+                                <!-- Empty State -->
+                                <div class="card text-center" id="emptyState">
+                                    <div class="card-body py-5">
+                                        <i class="fas fa-book-open text-primary mb-3" style="font-size: 3rem; opacity: 0.7;"></i>
+                                        <h3 class="text-muted">Welcome to your Knowledge Base</h3>
+                                        <p class="text-muted mb-4">Search through your indexed documents or browse by category</p>
+                                        <div class="d-flex justify-content-center gap-2">
+                                            <button class="btn btn-primary" onclick="document.getElementById('searchInput').focus()">
+                                                <i class="fas fa-search me-2"></i>Start Searching
+                                            </button>
+                                            <button class="btn btn-outline-secondary" id="browseAll">
+                                                <i class="fas fa-list me-2"></i>Browse All Documents
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- Results Container -->
+                                <div class="d-none" id="resultsContainer">
+                                    <!-- Document Results -->
+                                    <div id="documentResults" class="row">
+                                        <!-- Dynamic results loaded here -->
+                                    </div>
+                                    
+                                    <!-- Pagination -->
+                                    <nav class="mt-4 d-none" id="paginationContainer">
+                                        <ul class="pagination justify-content-center" id="pagination">
+                                            <!-- Dynamic pagination loaded here -->
+                                        </ul>
+                                    </nav>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </section>
             </div>
 
             <!-- API Docs Content -->
@@ -255,6 +531,27 @@
                 <b>Version</b> 1.0.0
             </div>
         </footer>
+    </div>
+
+    <!-- Document Preview Modal -->
+    <div class="modal fade" id="documentModal" tabindex="-1">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="documentModalTitle">Document Preview</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body" id="documentModalBody">
+                    <!-- Document preview content -->
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="downloadDocument">
+                        <i class="fas fa-download me-2"></i>Download
+                    </button>
+                </div>
+            </div>
+        </div>
     </div>
 
     <!-- jQuery -->

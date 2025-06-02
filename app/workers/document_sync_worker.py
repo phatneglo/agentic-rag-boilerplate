@@ -29,6 +29,7 @@ class DocumentSyncWorker:
     def __init__(self):
         self.worker = None
         self.redis_connection = None
+        self.is_running = False
     
     async def setup(self):
         """Setup Redis connection and worker."""
@@ -47,13 +48,16 @@ class DocumentSyncWorker:
             logger.info("Redis connection established for document sync worker")
             
             # Create worker - BullMQ Python API
+            # Note: The worker starts processing automatically when instantiated
             self.worker = Worker(
                 settings.queue_names["document_sync"],
                 self.process_job,
             )
             
+            self.is_running = True
+            
             logger.info(
-                "Document sync worker initialized",
+                "Document sync worker initialized and started",
                 queue_name=settings.queue_names["document_sync"]
             )
             
@@ -319,40 +323,60 @@ class DocumentSyncWorker:
             "sync_timestamp": "2024-01-15T10:30:00Z"
         }
     
-    async def start(self):
-        """Start the worker."""
-        await self.setup()
-        
-        logger.info("Starting document sync worker")
-        
-        try:
-            # Start processing jobs
-            await self.worker.run()
-        except KeyboardInterrupt:
-            logger.info("Document sync worker stopped by user")
-        except Exception as e:
-            logger.error("Document sync worker error", error=str(e))
-            raise
-        finally:
-            await self.cleanup()
+    async def stop(self):
+        """Stop the worker gracefully."""
+        if self.worker and self.is_running:
+            try:
+                await self.worker.close()
+                self.is_running = False
+                logger.info("Worker stopped gracefully")
+            except Exception as e:
+                logger.error("Error stopping worker", error=str(e))
+                self.is_running = False
     
     async def cleanup(self):
         """Cleanup resources."""
-        logger.info("Cleaning up document sync worker")
-        
-        if self.worker:
-            await self.worker.close()
+        await self.stop()
         
         if self.redis_connection:
             await self.redis_connection.close()
         
-        logger.info("Document sync worker cleanup complete")
+        logger.info("Document sync worker cleaned up")
 
 
 async def main():
     """Main function to run the worker."""
     worker = DocumentSyncWorker()
-    await worker.start()
+    
+    try:
+        await worker.setup()
+        
+        # Create an event that will be triggered for shutdown
+        shutdown_event = asyncio.Event()
+        
+        def signal_handler(sig, frame):
+            logger.info("Received shutdown signal")
+            shutdown_event.set()
+        
+        # Register signal handlers for graceful shutdown
+        import signal
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+        
+        logger.info("Document sync worker is ready and processing jobs...")
+        logger.info("Press Ctrl+C to stop the worker")
+        
+        # Wait until the shutdown event is set
+        await shutdown_event.wait()
+        
+    except KeyboardInterrupt:
+        logger.info("Received interrupt signal, shutting down gracefully...")
+    except Exception as e:
+        logger.error("Worker failed", error=str(e))
+        raise
+    finally:
+        await worker.cleanup()
+        logger.info("Worker shutdown complete")
 
 
 if __name__ == "__main__":

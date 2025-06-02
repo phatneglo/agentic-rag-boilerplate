@@ -34,6 +34,7 @@ class TypesenseIndexerWorker:
         self.redis_connection = None
         self.typesense_client = None
         self.collection_name = "documents"
+        self.is_running = False
     
     async def setup(self):
         """Setup Redis connection, worker, and Typesense client."""
@@ -68,13 +69,16 @@ class TypesenseIndexerWorker:
             logger.info("Typesense client initialized successfully")
             
             # Create worker - BullMQ Python API
+            # Note: The worker starts processing automatically when instantiated
             self.worker = Worker(
                 settings.queue_names["typesense_indexer"],
                 self.process_job,
             )
             
+            self.is_running = True
+            
             logger.info(
-                "Typesense indexer worker initialized",
+                "Typesense indexer worker initialized and started",
                 queue_name=settings.queue_names["typesense_indexer"]
             )
             
@@ -350,18 +354,20 @@ class TypesenseIndexerWorker:
             logger.error("Typesense search failed", error=str(e))
             raise TypesenseIndexingError(f"Search failed: {e}")
     
-    async def start(self):
-        """Start the worker."""
-        if not self.worker:
-            raise RuntimeError("Worker not initialized. Call setup() first.")
-        
-        logger.info("Starting Typesense indexer worker...")
-        await self.worker.run()
+    async def stop(self):
+        """Stop the worker gracefully."""
+        if self.worker and self.is_running:
+            try:
+                await self.worker.close()
+                self.is_running = False
+                logger.info("Worker stopped gracefully")
+            except Exception as e:
+                logger.error("Error stopping worker", error=str(e))
+                self.is_running = False
     
     async def cleanup(self):
         """Cleanup resources."""
-        if self.worker:
-            await self.worker.close()
+        await self.stop()
         
         if self.redis_connection:
             await self.redis_connection.close()
@@ -375,14 +381,33 @@ async def main():
     
     try:
         await worker.setup()
-        await worker.start()
+        
+        # Create an event that will be triggered for shutdown
+        shutdown_event = asyncio.Event()
+        
+        def signal_handler(sig, frame):
+            logger.info("Received shutdown signal")
+            shutdown_event.set()
+        
+        # Register signal handlers for graceful shutdown
+        import signal
+        signal.signal(signal.SIGTERM, signal_handler)
+        signal.signal(signal.SIGINT, signal_handler)
+        
+        logger.info("Typesense indexer worker is ready and processing jobs...")
+        logger.info("Press Ctrl+C to stop the worker")
+        
+        # Wait until the shutdown event is set
+        await shutdown_event.wait()
+        
     except KeyboardInterrupt:
-        logger.info("Received interrupt signal")
+        logger.info("Received interrupt signal, shutting down gracefully...")
     except Exception as e:
         logger.error("Worker failed", error=str(e))
         raise
     finally:
         await worker.cleanup()
+        logger.info("Worker shutdown complete")
 
 
 if __name__ == "__main__":

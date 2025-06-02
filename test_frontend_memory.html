@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Frontend Memory Test</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin: 10px 0;
+            border-radius: 8px;
+            border-left: 4px solid #007bff;
+        }
+        .test-result {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        .success {
+            background-color: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .error {
+            background-color: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .info {
+            background-color: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
+        }
+        button {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin: 5px;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #status {
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        .memory-info {
+            background-color: #e9ecef;
+            padding: 10px;
+            border-radius: 4px;
+            margin: 10px 0;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <h1>🧠 Enhanced Memory System Frontend Test</h1>
+    
+    <div class="test-section">
+        <h2>WebSocket Connection Test</h2>
+        <div id="status">Status: Disconnected</div>
+        <button onclick="connectWebSocket()">Connect</button>
+        <button onclick="disconnectWebSocket()">Disconnect</button>
+        <div id="connectionResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Memory Session Test</h2>
+        <button onclick="initializeSession()">Initialize Session</button>
+        <button onclick="getSessionInfo()">Get Session Info</button>
+        <div id="sessionResults"></div>
+        <div id="memoryInfo" class="memory-info" style="display: none;"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>Chat Memory Test</h2>
+        <button onclick="sendTestMessage('Hello! Can you help me write a Python function?')">Send Test Message 1</button>
+        <button onclick="sendTestMessage('Can you make it recursive?')">Send Test Message 2</button>
+        <button onclick="sendTestMessage('What was my first question?')">Send Test Message 3</button>
+        <div id="chatResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>History Test</h2>
+        <button onclick="loadSessionHistory()">Load Session History</button>
+        <div id="historyResults"></div>
+    </div>
+
+    <script>
+        let ws = null;
+        let currentSessionId = null;
+        let currentUserId = 'frontend-test-user';
+        
+        function addResult(containerId, message, type = 'info') {
+            const container = document.getElementById(containerId);
+            const div = document.createElement('div');
+            div.className = `test-result ${type}`;
+            div.innerHTML = `[${new Date().toLocaleTimeString()}] ${message}`;
+            container.appendChild(div);
+            container.scrollTop = container.scrollHeight;
+        }
+        
+        function updateStatus(message) {
+            document.getElementById('status').textContent = `Status: ${message}`;
+        }
+        
+        function updateMemoryInfo() {
+            const info = document.getElementById('memoryInfo');
+            if (currentSessionId) {
+                info.style.display = 'block';
+                info.innerHTML = `
+Session ID: ${currentSessionId}<br>
+User ID: ${currentUserId}<br>
+Connection: ${ws ? 'Connected' : 'Disconnected'}
+                `;
+            } else {
+                info.style.display = 'none';
+            }
+        }
+        
+        function connectWebSocket() {
+            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
+            
+            addResult('connectionResults', `Connecting to: ${wsUrl}`, 'info');
+            
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = function(event) {
+                updateStatus('Connected');
+                addResult('connectionResults', 'WebSocket connected successfully!', 'success');
+                updateMemoryInfo();
+            };
+            
+            ws.onmessage = function(event) {
+                try {
+                    const data = JSON.parse(event.data);
+                    handleWebSocketMessage(data);
+                } catch (error) {
+                    addResult('connectionResults', `Error parsing message: ${error.message}`, 'error');
+                }
+            };
+            
+            ws.onclose = function(event) {
+                updateStatus('Disconnected');
+                addResult('connectionResults', `WebSocket closed: ${event.code} - ${event.reason}`, 'info');
+                updateMemoryInfo();
+            };
+            
+            ws.onerror = function(error) {
+                addResult('connectionResults', `WebSocket error: ${error}`, 'error');
+            };
+        }
+        
+        function disconnectWebSocket() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+        
+        function handleWebSocketMessage(data) {
+            console.log('Received message:', data);
+            
+            switch (data.type) {
+                case 'session_initialized':
+                    currentSessionId = data.session_id;
+                    currentUserId = data.user_id;
+                    addResult('sessionResults', `Session initialized: ${currentSessionId}`, 'success');
+                    updateMemoryInfo();
+                    break;
+                    
+                case 'session_info':
+                    addResult('sessionResults', `Session info - ID: ${data.session_id}, User: ${data.user_id}`, 'info');
+                    break;
+                    
+                case 'session_history':
+                    const historyCount = data.history ? data.history.length : 0;
+                    addResult('historyResults', `History loaded: ${historyCount} messages`, 'success');
+                    if (data.history) {
+                        data.history.forEach((msg, index) => {
+                            addResult('historyResults', `${index + 1}. [${msg.type}] ${msg.content.substring(0, 100)}...`, 'info');
+                        });
+                    }
+                    break;
+                    
+                case 'response_start':
+                    addResult('chatResults', 'AI response started...', 'info');
+                    break;
+                    
+                case 'agent_thinking':
+                    addResult('chatResults', `Agent thinking: ${data.status}`, 'info');
+                    break;
+                    
+                case 'agent_streaming':
+                    // Don't log every streaming chunk to avoid spam
+                    break;
+                    
+                case 'response_complete':
+                    let memoryInfo = '';
+                    if (data.memory) {
+                        memoryInfo = ` [Memory: ${data.memory.message_count} messages, Agent: ${data.memory.primary_agent}]`;
+                    }
+                    addResult('chatResults', `✅ Response completed${memoryInfo}`, 'success');
+                    break;
+                    
+                case 'agent_error':
+                    addResult('chatResults', `❌ Agent error: ${data.error}`, 'error');
+                    break;
+                    
+                case 'error':
+                    addResult('connectionResults', `❌ Error: ${data.message}`, 'error');
+                    break;
+                    
+                default:
+                    console.log('Unhandled message type:', data.type);
+            }
+        }
+        
+        function sendMessage(message) {
+            if (!ws || ws.readyState !== WebSocket.OPEN) {
+                addResult('chatResults', 'WebSocket not connected!', 'error');
+                return;
+            }
+            
+            ws.send(JSON.stringify(message));
+        }
+        
+        function initializeSession() {
+            const message = {
+                type: 'init_session',
+                user_id: currentUserId,
+                config: { test: 'frontend_memory' },
+                timestamp: Date.now()
+            };
+            
+            addResult('sessionResults', 'Initializing session...', 'info');
+            sendMessage(message);
+        }
+        
+        function getSessionInfo() {
+            const message = {
+                type: 'get_session_info',
+                timestamp: Date.now()
+            };
+            
+            addResult('sessionResults', 'Getting session info...', 'info');
+            sendMessage(message);
+        }
+        
+        function sendTestMessage(content) {
+            if (!currentSessionId) {
+                addResult('chatResults', 'No session initialized! Initialize session first.', 'error');
+                return;
+            }
+            
+            const message = {
+                type: 'chat_message',
+                content: content,
+                session_id: currentSessionId,
+                user_id: currentUserId,
+                context: { test: 'frontend_memory' },
+                timestamp: Date.now()
+            };
+            
+            addResult('chatResults', `Sending: "${content}"`, 'info');
+            sendMessage(message);
+        }
+        
+        function loadSessionHistory() {
+            if (!currentSessionId) {
+                addResult('historyResults', 'No session initialized! Initialize session first.', 'error');
+                return;
+            }
+            
+            const message = {
+                type: 'load_session',
+                session_id: currentSessionId,
+                timestamp: Date.now()
+            };
+            
+            addResult('historyResults', 'Loading session history...', 'info');
+            sendMessage(message);
+        }
+        
+        // Auto-connect on page load
+        window.addEventListener('load', () => {
+            setTimeout(() => {
+                connectWebSocket();
+                setTimeout(() => {
+                    if (ws && ws.readyState === WebSocket.OPEN) {
+                        initializeSession();
+                    }
+                }, 1000);
+            }, 500);
+        });
+    </script>
+</body>
+</html> 

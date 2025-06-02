@@ -1,6 +1,6 @@
 /**
  * Chat WebSocket Module
- * Handles real-time communication between client and AI service
+ * Handles real-time communication between client and AI service with enhanced memory support
  */
 
 class ChatWebSocket {
@@ -12,6 +12,12 @@ class ChatWebSocket {
         this.isConnecting = false;
         this.messageQueue = [];
         this.listeners = new Map();
+        
+        // Enhanced memory state
+        this.currentSessionId = null;
+        this.userId = null;
+        this.memoryLoaded = false;
+        this.sessionHistory = [];
         
         // Bind methods
         this.connect = this.connect.bind(this);
@@ -36,7 +42,7 @@ class ChatWebSocket {
             const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
             const wsUrl = `${protocol}//${window.location.host}/ws/chat`;
             
-            console.log('Connecting to WebSocket:', wsUrl);
+            console.log('🔗 Connecting to WebSocket:', wsUrl);
             
             // Use real WebSocket implementation
             this.ws = new WebSocket(wsUrl);
@@ -59,6 +65,52 @@ class ChatWebSocket {
             console.error('Failed to create WebSocket connection:', error);
             this.handleConnectionError();
         }
+    }
+
+    /**
+     * Initialize or load a chat session
+     */
+    async initializeSession(sessionId = null, userId = null, config = {}) {
+        console.log('🧠 MEMORY: Initializing session...', { sessionId, userId });
+        
+        this.userId = userId;
+        
+        const message = {
+            type: 'init_session',
+            session_id: sessionId,
+            user_id: userId,
+            config: config,
+            timestamp: Date.now()
+        };
+        
+        this.send(message);
+    }
+
+    /**
+     * Load conversation history for a session
+     */
+    async loadSessionHistory(sessionId) {
+        console.log('📚 MEMORY: Loading session history...', sessionId);
+        
+        const message = {
+            type: 'load_session',
+            session_id: sessionId,
+            timestamp: Date.now()
+        };
+        
+        this.send(message);
+    }
+
+    /**
+     * Get current session information
+     */
+    async getSessionInfo() {
+        const message = {
+            type: 'get_session_info',
+            timestamp: Date.now()
+        };
+        
+        this.send(message);
     }
 
     /**
@@ -111,6 +163,26 @@ class ChatWebSocket {
             
             if (message.type === 'chat_message') {
                 response = this.generateMockResponse(message.content);
+            } else if (message.type === 'init_session') {
+                // Mock session initialization
+                response = {
+                    type: 'session_initialized',
+                    session_id: 'mock-session-' + Date.now(),
+                    user_id: message.user_id || 'mock-user',
+                    timestamp: Date.now()
+                };
+            } else if (message.type === 'load_session') {
+                // Mock session history
+                response = {
+                    type: 'session_history',
+                    session_id: message.session_id,
+                    history: [
+                        { type: 'human', content: 'Hello! Can you help me?', timestamp: Date.now() - 60000 },
+                        { type: 'ai', content: 'Of course! I\'d be happy to help you.', timestamp: Date.now() - 59000 }
+                    ],
+                    stats: { total_messages: 2, total_tokens: 150 },
+                    timestamp: Date.now()
+                };
             } else if (message.type === 'ping') {
                 response = { type: 'pong', timestamp: Date.now() };
             }
@@ -132,7 +204,13 @@ class ChatWebSocket {
                 type: 'chat_response',
                 content: 'I understand you\'re asking about: "' + userMessage + '". Let me help you with that!',
                 timestamp: Date.now(),
-                artifacts: []
+                artifacts: [],
+                memory: {
+                    session_id: this.currentSessionId || 'mock-session-' + Date.now(),
+                    memory_loaded: true,
+                    message_count: (this.sessionHistory.length + 2), // +2 for current exchange
+                    primary_agent: 'general'
+                }
             },
             {
                 type: 'chat_response',
@@ -154,42 +232,13 @@ class ChatWebSocket {
 for i in range(10):
     print(f"F({i}) = {fibonacci(i)}")`,
                     }
-                ]
-            },
-            {
-                type: 'chat_response',
-                content: 'Here\'s a comprehensive guide based on your request:',
-                timestamp: Date.now(),
-                artifacts: [
-                    {
-                        id: 'artifact_' + Date.now(),
-                        type: 'markdown',
-                        title: 'Getting Started Guide',
-                        content: `# Getting Started Guide
-
-## Overview
-This guide will help you understand the basics and get started quickly.
-
-### Key Features
-- **Easy to use**: Simple and intuitive interface
-- **Powerful**: Advanced functionality when you need it
-- **Flexible**: Customizable to your needs
-
-### Quick Start
-1. First, install the required dependencies
-2. Configure your settings
-3. Run the application
-
-\`\`\`bash
-npm install
-npm start
-\`\`\`
-
-> **Note**: Make sure you have Node.js installed before running these commands.
-
-For more information, check the [documentation](https://example.com).`
-                    }
-                ]
+                ],
+                memory: {
+                    session_id: this.currentSessionId || 'mock-session-' + Date.now(),
+                    memory_loaded: true,
+                    message_count: (this.sessionHistory.length + 2),
+                    primary_agent: 'code'
+                }
             }
         ];
         
@@ -200,56 +249,6 @@ For more information, check the [documentation](https://example.com).`
             return responses[1]; // Response with code artifact
         }
         
-        if (lowerMessage.includes('guide') || lowerMessage.includes('markdown') || lowerMessage.includes('documentation')) {
-            return responses[2]; // Response with markdown artifact
-        }
-        
-        if (lowerMessage.includes('diagram') || lowerMessage.includes('mermaid') || lowerMessage.includes('architecture')) {
-            return {
-                type: 'chat_response',
-                content: 'I\'ll create a diagram to visualize this for you.',
-                timestamp: Date.now(),
-                artifacts: [
-                    {
-                        id: 'artifact_' + Date.now(),
-                        type: 'mermaid',
-                        title: 'System Architecture Diagram',
-                        content: `graph TD
-    A[User Interface] --> B[API Gateway]
-    B --> C[Authentication Service]
-    B --> D[Business Logic]
-    C --> E[User Database]
-    D --> F[Main Database]
-    D --> G[Cache Layer]
-    F --> H[Analytics Engine]
-    G --> I[Session Store]`
-                    }
-                ]
-            };
-        }
-        
-        if (lowerMessage.includes('flowchart') || lowerMessage.includes('process') || lowerMessage.includes('workflow')) {
-            return {
-                type: 'chat_response',
-                content: 'Here\'s a flowchart showing the process:',
-                timestamp: Date.now(),
-                artifacts: [
-                    {
-                        id: 'artifact_' + Date.now(),
-                        type: 'mermaid',
-                        title: 'Process Flowchart',
-                        content: `flowchart LR
-    Start([Start]) --> Input[Get User Input]
-    Input --> Process{Process Data}
-    Process -->|Valid| Success[Success]
-    Process -->|Invalid| Error[Show Error]
-    Error --> Input
-    Success --> End([End])`
-                    }
-                ]
-            };
-        }
-        
         return responses[0]; // Default response
     }
 
@@ -257,11 +256,11 @@ For more information, check the [documentation](https://example.com).`
      * Handle WebSocket connection opened
      */
     handleOpen() {
-        console.log('WebSocket connected');
+        console.log('✅ WebSocket connected successfully');
         this.isConnecting = false;
         this.reconnectAttempts = 0;
         
-        // Clear connection timeout if set
+        // Clear connection timeout
         if (this.connectionTimeout) {
             clearTimeout(this.connectionTimeout);
             this.connectionTimeout = null;
@@ -270,36 +269,41 @@ For more information, check the [documentation](https://example.com).`
         // Process queued messages
         while (this.messageQueue.length > 0) {
             const message = this.messageQueue.shift();
-            this.send(message);
+            this.ws.send(JSON.stringify(message));
         }
-        
-        this.emit('connected');
         
         // Start heartbeat
         this.startHeartbeat();
+        
+        // Emit connected event
+        this.emit('connected', { timestamp: Date.now() });
+        
+        // Auto-initialize session if none exists
+        if (!this.currentSessionId) {
+            setTimeout(() => {
+                this.initializeSession(null, this.userId);
+            }, 500);
+        }
     }
 
     /**
-     * Handle WebSocket message received
+     * Handle incoming WebSocket messages
      */
     handleMessage(event) {
         try {
             const message = JSON.parse(event.data);
-            console.log('WebSocket message received:', message);
+            console.log('📨 Received message:', message.type, message);
             
             switch (message.type) {
-                // Legacy message types (keep for compatibility)
-                case 'chat_response':
-                    this.emit('chat_response', message);
+                case 'session_initialized':
+                    this.handleSessionInitialized(message);
                     break;
-                case 'typing_start':
-                    this.emit('typing_start');
+                case 'session_history':
+                    this.handleSessionHistory(message);
                     break;
-                case 'typing_stop':
-                    this.emit('typing_stop');
+                case 'session_info':
+                    this.handleSessionInfo(message);
                     break;
-                    
-                // New streaming message types
                 case 'response_start':
                     this.emit('response_start', message);
                     break;
@@ -310,7 +314,7 @@ For more information, check the [documentation](https://example.com).`
                     this.emit('agent_streaming', message);
                     break;
                 case 'response_complete':
-                    this.emit('response_complete', message);
+                    this.handleResponseComplete(message);
                     break;
                 case 'agent_error':
                     this.emit('agent_error', message);
@@ -318,8 +322,6 @@ For more information, check the [documentation](https://example.com).`
                 case 'generation_stopped':
                     this.emit('generation_stopped', message);
                     break;
-                    
-                // System messages
                 case 'error':
                     this.emit('error', message);
                     break;
@@ -333,6 +335,73 @@ For more information, check the [documentation](https://example.com).`
         } catch (error) {
             console.error('Failed to parse WebSocket message:', error);
         }
+    }
+
+    /**
+     * Handle session initialized
+     */
+    handleSessionInitialized(message) {
+        this.currentSessionId = message.session_id;
+        this.userId = message.user_id;
+        this.memoryLoaded = false;
+        
+        console.log('🆕 MEMORY: Session initialized', {
+            sessionId: this.currentSessionId,
+            userId: this.userId
+        });
+        
+        this.emit('session_initialized', {
+            sessionId: this.currentSessionId,
+            userId: this.userId,
+            message: message
+        });
+    }
+
+    /**
+     * Handle session history loaded
+     */
+    handleSessionHistory(message) {
+        this.sessionHistory = message.history || [];
+        this.memoryLoaded = true;
+        
+        console.log('📚 MEMORY: Session history loaded', {
+            sessionId: message.session_id,
+            messageCount: this.sessionHistory.length,
+            stats: message.stats
+        });
+        
+        this.emit('session_history', {
+            sessionId: message.session_id,
+            history: this.sessionHistory,
+            stats: message.stats,
+            message: message
+        });
+    }
+
+    /**
+     * Handle session info
+     */
+    handleSessionInfo(message) {
+        this.emit('session_info', message);
+    }
+
+    /**
+     * Handle response complete with memory metadata
+     */
+    handleResponseComplete(message) {
+        // Update local memory state if provided
+        if (message.memory) {
+            this.currentSessionId = message.memory.session_id || this.currentSessionId;
+            this.memoryLoaded = message.memory.memory_loaded || this.memoryLoaded;
+            
+            console.log('💾 MEMORY: Response completed', {
+                sessionId: this.currentSessionId,
+                messageCount: message.memory.message_count,
+                primaryAgent: message.memory.primary_agent
+            });
+        }
+        
+        this.emit('response_complete', message);
     }
 
     /**
@@ -406,13 +475,34 @@ For more information, check the [documentation](https://example.com).`
     }
 
     /**
-     * Send chat message
+     * Send chat message with memory context
      */
-    sendChatMessage(content, attachments = []) {
+    sendChatMessage(content, context = {}, attachments = []) {
         const message = {
             type: 'chat_message',
             content: content,
+            session_id: this.currentSessionId,
+            user_id: this.userId,
+            context: context,
             attachments: attachments,
+            timestamp: Date.now()
+        };
+        
+        console.log('💬 Sending chat message with memory context', {
+            sessionId: this.currentSessionId,
+            userId: this.userId,
+            contentLength: content.length
+        });
+        
+        this.send(message);
+    }
+
+    /**
+     * Stop message generation
+     */
+    stopGeneration() {
+        const message = {
+            type: 'stop_generation',
             timestamp: Date.now()
         };
         
@@ -439,6 +529,18 @@ For more information, check the [documentation](https://example.com).`
             clearInterval(this.heartbeatInterval);
             this.heartbeatInterval = null;
         }
+    }
+
+    /**
+     * Get current memory state
+     */
+    getMemoryState() {
+        return {
+            sessionId: this.currentSessionId,
+            userId: this.userId,
+            memoryLoaded: this.memoryLoaded,
+            historyLength: this.sessionHistory.length
+        };
     }
 
     /**

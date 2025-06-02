@@ -24,11 +24,13 @@ from app.api.routes.document_routes import router as document_router
 from app.api.routes.file_routes import upload_router
 from app.api.routes.file_manager import router as file_manager_router
 from app.api.routes.chat_routes import router as chat_router
+from app.api.routes.chat_memory_routes import router as chat_memory_router
 from app.api.routes.document_processing_routes import router as document_processing_router
 from app.api.routes.test_routes import router as test_router
 from app.api.v1.uac_auth import router as uac_auth_router
 from app.utils.queue_manager import queue_manager
 from app.models.responses.document_responses import HealthCheckResponse, ErrorResponse
+from app.db.session import init_db, close_db, test_connection
 from app import __version__
 
 
@@ -46,37 +48,52 @@ async def lifespan(app: FastAPI):
     # Startup
     logger.info("Starting Document Processing API", version=__version__)
     
+    # Initialize PostgreSQL database
+    try:
+        await init_db()
+        logger.info("✅ PostgreSQL database initialized successfully")
+    except Exception as e:
+        logger.error(f"❌ Failed to initialize PostgreSQL database: {e}")
+        # Continue startup but log the error
+    
     # Initialize Redis connection
     try:
         await queue_manager.get_redis_client()
-        logger.info("Redis connection initialized successfully")
+        logger.info("✅ Redis connection initialized successfully")
     except Exception as e:
-        logger.error("Failed to initialize Redis connection", error=str(e))
+        logger.error("❌ Failed to initialize Redis connection", error=str(e))
         # Don't fail startup, let the app handle connection errors gracefully
     
     # Initialize WebSocket manager
     try:
         from app.api.routes.websocket_handler import chat_websocket_manager
-        logger.info("WebSocket manager initialized successfully")
+        logger.info("✅ WebSocket manager initialized successfully")
     except Exception as e:
-        logger.error("Failed to initialize WebSocket manager", error=str(e))
+        logger.error("❌ Failed to initialize WebSocket manager", error=str(e))
     
     # Store startup time
     app.state.startup_time = time.time()
     
-    logger.info("Document Processing API started successfully")
+    logger.info("🚀 Document Processing API started successfully")
     
     yield
     
     # Shutdown
-    logger.info("Shutting down Document Processing API")
+    logger.info("🛑 Shutting down Document Processing API")
+    
+    # Close PostgreSQL connections
+    try:
+        await close_db()
+        logger.info("✅ PostgreSQL database connections closed")
+    except Exception as e:
+        logger.error(f"❌ Error closing PostgreSQL connections: {e}")
     
     # Close Redis connection
     try:
         await queue_manager.close()
-        logger.info("Redis connection closed successfully")
+        logger.info("✅ Redis connection closed successfully")
     except Exception as e:
-        logger.error("Error closing Redis connection", error=str(e))
+        logger.error("❌ Error closing Redis connection", error=str(e))
     
     # Clean up WebSocket connections
     try:
@@ -88,11 +105,11 @@ async def lifespan(app: FastAPI):
             except:
                 pass
         chat_websocket_manager.active_connections.clear()
-        logger.info("WebSocket connections cleaned up")
+        logger.info("✅ WebSocket connections cleaned up")
     except Exception as e:
-        logger.error("Error cleaning up WebSocket connections", error=str(e))
+        logger.error("❌ Error cleaning up WebSocket connections", error=str(e))
     
-    logger.info("Document Processing API shutdown complete")
+    logger.info("✅ Document Processing API shutdown complete")
 
 
 # Create FastAPI application
@@ -384,6 +401,12 @@ app.include_router(
     chat_router,
     prefix=f"/api/{settings.api_version}/chat",
     tags=["chat"]
+)
+
+# Include chat memory routes
+app.include_router(
+    chat_memory_router,
+    tags=["chat-memory"]
 )
 
 # Include document processing pipeline router

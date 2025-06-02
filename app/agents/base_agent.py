@@ -94,14 +94,21 @@ class BaseAgent(ABC):
     async def generate_response(self, user_input: str, system_prompt: str = None, config: Dict[str, Any] = None) -> str:
         """Generate LLM response using GPT-4o mini with streaming support."""
         try:
+            logger.info(f"🚀 {self.name}: generate_response called with input: '{user_input[:50]}...'")
+            
             if not self.llm:
                 # Mock response when API key is not available
+                logger.warning(f"⚠️ {self.name}: No LLM available, using mock response")
                 return self._generate_mock_response(user_input, system_prompt)
+            
+            logger.info(f"✅ {self.name}: LLM is available, proceeding with generation")
             
             messages = [
                 SystemMessage(content=system_prompt or self.get_system_prompt()),
                 HumanMessage(content=user_input)
             ]
+            
+            logger.info(f"📝 {self.name}: Created messages with system prompt length: {len(system_prompt or self.get_system_prompt())}")
             
             # Check if streaming is requested via config
             if config and config.get("callbacks"):
@@ -131,20 +138,28 @@ class BaseAgent(ABC):
                 except asyncio.CancelledError:
                     logger.info(f"🛑 {self.name}: Generation cancelled via asyncio.CancelledError")
                     raise
+                except Exception as stream_error:
+                    logger.error(f"❌ {self.name}: Error during streaming: {stream_error}")
+                    raise
                 
                 logger.info(f"✅ {self.name}: Completed streaming - {len(full_response)} characters total")
                 return full_response
             else:
                 # Regular non-streaming request
+                logger.info(f"🔧 {self.name}: Using regular non-streaming request")
                 response = await self.llm.ainvoke(messages)
+                logger.info(f"✅ {self.name}: Got response with {len(response.content)} characters")
                 return response.content
             
         except asyncio.CancelledError:
             # Re-raise cancellation to properly handle it
+            logger.info(f"🛑 {self.name}: CancelledError re-raised")
             raise
         except Exception as e:
-            logger.error(f"Error generating response in {self.name}: {e}")
+            logger.error(f"❌ {self.name}: Error generating response: {e}")
+            logger.error(f"❌ {self.name}: Error type: {type(e).__name__}")
             # Fallback to mock response on error
+            logger.warning(f"⚠️ {self.name}: Falling back to mock response due to error")
             return self._generate_mock_response(user_input, system_prompt)
     
     def _generate_mock_response(self, user_input: str, system_prompt: str = None) -> str:

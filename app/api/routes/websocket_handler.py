@@ -1,14 +1,17 @@
 """
-WebSocket handler for real-time multi-agent chat streaming
+WebSocket handler for real-time multi-agent chat streaming with enhanced memory
 """
 import asyncio
 import json
 import time
+import uuid
 from typing import Dict, List, Any, Optional
 from fastapi import WebSocket, WebSocketDisconnect
 from langchain.callbacks.base import BaseCallbackHandler
 from app.core.logging_config import get_logger
 from app.agents.agent_orchestrator import AgentOrchestrator
+from app.db.memory import PostgresChatMemory
+from app.db.session import init_db
 
 logger = get_logger(__name__)
 
@@ -16,13 +19,24 @@ class ChatWebSocketManager:
     def __init__(self):
         self.active_connections: List[WebSocket] = []
         self.orchestrator = AgentOrchestrator()
-        self.active_tasks: Dict[WebSocket, asyncio.Task] = {}  # Track active generation tasks
-        self.active_callbacks: Dict[WebSocket, AsyncStreamingCallback] = {}  # Track active callbacks
+        self.memory = PostgresChatMemory()
+        self.active_tasks: Dict[WebSocket, asyncio.Task] = {}
+        self.active_callbacks: Dict[WebSocket, 'AsyncStreamingCallback'] = {}
+        # Track session info per connection
+        self.connection_sessions: Dict[WebSocket, Dict[str, Any]] = {}
         
     async def connect(self, websocket: WebSocket):
         await websocket.accept()
         self.active_connections.append(websocket)
-        logger.info("WebSocket connection established")
+        
+        # Initialize connection session info
+        self.connection_sessions[websocket] = {
+            "session_id": None,
+            "user_id": None,
+            "last_activity": time.time()
+        }
+        
+        logger.info("🔗 WebSocket connection established")
 
     def disconnect(self, websocket: WebSocket):
         # Cancel any active task for this connection
@@ -38,34 +52,170 @@ class ChatWebSocketManager:
             callback.cancel()
             del self.active_callbacks[websocket]
             
+        # Clean up connection session info
+        if websocket in self.connection_sessions:
+            del self.connection_sessions[websocket]
+            
         if websocket in self.active_connections:
             self.active_connections.remove(websocket)
-        logger.info("WebSocket connection closed")
+        logger.info("🔗 WebSocket connection closed")
 
     async def send_personal_message(self, message: str, websocket: WebSocket):
         await websocket.send_text(message)
 
     async def handle_message(self, websocket: WebSocket, data: str):
-        """Handle incoming WebSocket messages with proper streaming"""
+        """Handle incoming WebSocket messages with enhanced memory support"""
         try:
             message_data = json.loads(data)
-            logger.info("Received WebSocket message", message_type=message_data.get("type"))
+            logger.info(f"📨 Received WebSocket message: {message_data.get('type')}")
             
-            if message_data.get("type") == "chat_message":
-                await self.handle_chat_message(websocket, message_data.get("content", ""))
-            elif message_data.get("type") == "stop_generation":
+            message_type = message_data.get("type")
+            
+            if message_type == "chat_message":
+                await self.handle_chat_message(
+                    websocket, 
+                    message_data.get("content", ""),
+                    message_data.get("session_id"),
+                    message_data.get("user_id"),
+                    message_data.get("context", {})
+                )
+            elif message_type == "init_session":
+                await self.handle_session_init(
+                    websocket,
+                    message_data.get("session_id"),
+                    message_data.get("user_id"),
+                    message_data.get("config", {})
+                )
+            elif message_type == "load_session":
+                await self.handle_session_load(
+                    websocket,
+                    message_data.get("session_id")
+                )
+            elif message_type == "stop_generation":
                 await self.handle_stop_generation(websocket)
-            elif message_data.get("type") == "ping":
+            elif message_type == "ping":
                 await self.handle_ping(websocket)
+            elif message_type == "get_session_info":
+                await self.handle_get_session_info(websocket)
                 
         except json.JSONDecodeError:
-            logger.error("Invalid JSON received from WebSocket")
+            logger.error("❌ Invalid JSON received from WebSocket")
         except Exception as e:
-            logger.error("Error processing WebSocket message", error=str(e))
+            logger.error(f"❌ Error processing WebSocket message: {e}")
             await self.send_error_response(websocket, str(e))
 
-    async def handle_chat_message(self, websocket: WebSocket, content: str):
-        """Handle incoming chat message with real-time streaming using LangGraph orchestrator"""
+    async def handle_session_init(self, websocket: WebSocket, session_id: Optional[str], user_id: Optional[str], config: Dict[str, Any]):
+        """Initialize or create a new chat session"""
+        try:
+            connection_info = self.connection_sessions.get(websocket, {})
+            
+            if session_id:
+                # Validate existing session
+                try:
+                    session_uuid = uuid.UUID(session_id)
+                    session_details = await self.memory.get_session(session_uuid)
+                    if session_details:
+                        connection_info["session_id"] = session_id
+                        connection_info["user_id"] = user_id or session_details.user_id
+                        logger.info(f"🔗 MEMORY: Connected to existing session {session_id}")
+                    else:
+                        # Session not found, create new one
+                        session_id = None
+                except (ValueError, Exception) as e:
+                    logger.warning(f"⚠️ Invalid session ID provided: {e}")
+                    session_id = None
+            
+            if not session_id:
+                # Create new session
+                try:
+                    session = await self.memory.create_session(
+                        title="New Chat Session",
+                        user_id=user_id or "anonymous",
+                        session_type="chat",
+                        config=config,
+                        context={"initiated_via": "websocket"}
+                    )
+                    session_id = str(session.id)
+                    connection_info["session_id"] = session_id
+                    connection_info["user_id"] = user_id or "anonymous"
+                    logger.info(f"🆕 MEMORY: Created new session {session_id}")
+                except Exception as e:
+                    logger.error(f"❌ Failed to create session: {e}")
+                    await self.send_error_response(websocket, "Failed to create chat session")
+                    return
+            
+            # Update connection info
+            connection_info["last_activity"] = time.time()
+            self.connection_sessions[websocket] = connection_info
+            
+            # Send session info back to client
+            await websocket.send_text(json.dumps({
+                "type": "session_initialized",
+                "session_id": session_id,
+                "user_id": connection_info["user_id"],
+                "timestamp": time.time()
+            }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error initializing session: {e}")
+            await self.send_error_response(websocket, f"Session initialization error: {e}")
+
+    async def handle_session_load(self, websocket: WebSocket, session_id: str):
+        """Load conversation history for a session"""
+        try:
+            if not session_id:
+                await self.send_error_response(websocket, "No session ID provided")
+                return
+                
+            session_uuid = uuid.UUID(session_id)
+            
+            # Load conversation history
+            history = await self.memory.get_conversation_history(session_uuid, limit=50)
+            session_stats = await self.memory.get_session_stats(session_uuid)
+            
+            # Convert LangChain messages to WebSocket format
+            formatted_history = []
+            for msg in history:
+                formatted_msg = {
+                    "type": "human" if hasattr(msg, 'type') and msg.type == "human" else "ai",
+                    "content": msg.content,
+                    "timestamp": time.time()  # We'd need to add timestamps to messages
+                }
+                formatted_history.append(formatted_msg)
+            
+            # Send history to client
+            await websocket.send_text(json.dumps({
+                "type": "session_history",
+                "session_id": session_id,
+                "history": formatted_history,
+                "stats": session_stats,
+                "timestamp": time.time()
+            }))
+            
+            logger.info(f"📚 MEMORY: Loaded {len(history)} messages for session {session_id}")
+            
+        except Exception as e:
+            logger.error(f"❌ Error loading session: {e}")
+            await self.send_error_response(websocket, f"Failed to load session: {e}")
+
+    async def handle_get_session_info(self, websocket: WebSocket):
+        """Get current session information"""
+        try:
+            connection_info = self.connection_sessions.get(websocket, {})
+            
+            await websocket.send_text(json.dumps({
+                "type": "session_info",
+                "session_id": connection_info.get("session_id"),
+                "user_id": connection_info.get("user_id"),
+                "last_activity": connection_info.get("last_activity"),
+                "timestamp": time.time()
+            }))
+            
+        except Exception as e:
+            logger.error(f"❌ Error getting session info: {e}")
+
+    async def handle_chat_message(self, websocket: WebSocket, content: str, session_id: Optional[str], user_id: Optional[str], context: Dict[str, Any]):
+        """Handle incoming chat message with enhanced memory integration"""
         
         # Cancel any existing task for this connection
         if websocket in self.active_tasks:
@@ -74,16 +224,16 @@ class ChatWebSocketManager:
                 old_task.cancel()
                 
         # Create a new task for this generation
-        task = asyncio.create_task(self._process_chat_message(websocket, content))
+        task = asyncio.create_task(self._process_chat_message_with_memory(websocket, content, session_id, user_id, context))
         self.active_tasks[websocket] = task
         
         try:
             await task
         except asyncio.CancelledError:
-            logger.info("Chat message processing was cancelled")
+            logger.info("💬 Chat message processing was cancelled")
             await self.send_generation_stopped(websocket)
         except Exception as e:
-            logger.error(f"Error in chat message task: {e}")
+            logger.error(f"❌ Error in chat message task: {e}")
             await self.send_error_response(websocket, str(e))
         finally:
             # Clean up task reference
@@ -93,30 +243,65 @@ class ChatWebSocketManager:
             # Clean up callback reference
             if websocket in self.active_callbacks:
                 callback = self.active_callbacks[websocket]
-                callback.cancel()  # Ensure it's cancelled
+                callback.cancel()
                 del self.active_callbacks[websocket]
 
-    async def _process_chat_message(self, websocket: WebSocket, content: str):
-        """Internal method to process the chat message with proper cancellation support"""
+    async def _process_chat_message_with_memory(self, websocket: WebSocket, content: str, session_id: Optional[str], user_id: Optional[str], context: Dict[str, Any]):
+        """Process chat message with enhanced memory system integration"""
         try:
-            # Send response start immediately
+            # Get or ensure session
+            connection_info = self.connection_sessions.get(websocket, {})
+            
+            if session_id:
+                connection_info["session_id"] = session_id
+            if user_id:
+                connection_info["user_id"] = user_id
+                
+            # If no session, create one
+            if not connection_info.get("session_id"):
+                await self.handle_session_init(websocket, session_id, user_id or "anonymous", {})
+                connection_info = self.connection_sessions.get(websocket, {})
+            
+            active_session_id = connection_info.get("session_id")
+            active_user_id = connection_info.get("user_id", "anonymous")
+            
+            if not active_session_id:
+                await self.send_error_response(websocket, "No active session")
+                return
+            
+            # Send response start
             await self.send_response_start(websocket)
             
             # Create streaming callback for real-time updates
             callback = AsyncStreamingCallback(websocket)
             self.active_callbacks[websocket] = callback
             
-            # Process with orchestrator using streaming with cancellation checks
-            config = {"callbacks": [callback]}
+            # Process with enhanced orchestrator
+            enhanced_config = {
+                "callbacks": [callback],
+                "session_id": active_session_id,
+                "user_id": active_user_id
+            }
             
-            # Wrap the orchestrator call to support cancellation
+            enhanced_context = context.copy()
+            enhanced_context.update({
+                "websocket_connection": True,
+                "streaming": True
+            })
+            
+            # Process with orchestrator using enhanced memory
             try:
+                logger.info(f"🧠 Processing message with session {active_session_id}")
                 agent_response = await asyncio.wait_for(
-                    self.orchestrator.process_request(content, config=config),
+                    self.orchestrator.process_request(
+                        content, 
+                        context=enhanced_context, 
+                        config=enhanced_config
+                    ),
                     timeout=300  # 5 minute timeout
                 )
             except asyncio.TimeoutError:
-                logger.warning("Agent processing timed out")
+                logger.warning("⏰ Agent processing timed out")
                 await self.send_agent_error(websocket, "assistant", "Response generation timed out")
                 return
             
@@ -126,7 +311,7 @@ class ChatWebSocketManager:
                 
             # Check if callback was cancelled
             if callback.is_cancelled:
-                logger.info("Processing stopped due to user cancellation")
+                logger.info("🛑 Processing stopped due to user cancellation")
                 return
             
             if agent_response.success:
@@ -134,20 +319,37 @@ class ChatWebSocketManager:
                 if not callback.has_streamed_content and not callback.is_cancelled:
                     await self.stream_agent_content(websocket, "Assistant", agent_response.content, chunk_size=8)
                 
-                # Send artifacts if available and not cancelled
+                # Send enhanced response with memory metadata
                 if not callback.is_cancelled:
                     artifacts = agent_response.artifacts or []
-                    await self.send_response_complete(websocket, agent_response.content, artifacts)
+                    
+                    # Add memory metadata to response
+                    memory_metadata = {
+                        "session_id": active_session_id,
+                        "memory_loaded": agent_response.metadata.get("memory_loaded", False),
+                        "message_count": agent_response.metadata.get("message_count", 0),
+                        "primary_agent": agent_response.metadata.get("primary_agent", "general")
+                    }
+                    
+                    await self.send_response_complete_with_memory(
+                        websocket, 
+                        agent_response.content, 
+                        artifacts, 
+                        memory_metadata
+                    )
             else:
                 if not callback.is_cancelled:
                     await self.send_agent_error(websocket, "assistant", agent_response.error or "Failed to process request")
                 
+            # Update connection activity
+            connection_info["last_activity"] = time.time()
+            self.connection_sessions[websocket] = connection_info
+                
         except asyncio.CancelledError:
-            # Re-raise cancellation to properly handle it
-            logger.info("Chat message processing was cancelled")
+            logger.info("💬 Chat message processing was cancelled")
             raise
         except Exception as e:
-            logger.error(f"Error handling chat message: {e}")
+            logger.error(f"❌ Error handling chat message with memory: {e}")
             if not callback.is_cancelled:
                 await self.send_error_response(websocket, str(e))
 
@@ -218,6 +420,16 @@ class ChatWebSocketManager:
             "artifacts": [artifact.dict() for artifact in artifacts],
             "timestamp": time.time()
             # Note: content removed to save bandwidth since client already has it from streaming
+        }))
+
+    async def send_response_complete_with_memory(self, websocket: WebSocket, content: str, artifacts: List, memory_metadata: Dict[str, Any]):
+        """Send response complete with enhanced memory metadata."""
+        await websocket.send_text(json.dumps({
+            "type": "response_complete",
+            "content": content,
+            "artifacts": artifacts,
+            "memory": memory_metadata,
+            "timestamp": time.time()
         }))
 
     async def handle_stop_generation(self, websocket: WebSocket):
@@ -369,4 +581,7 @@ async def websocket_endpoint(websocket: WebSocket):
         manager.disconnect(websocket)
     except Exception as e:
         logger.error(f"WebSocket error: {e}")
-        manager.disconnect(websocket) 
+        manager.disconnect(websocket)
+
+# Global manager instance for access from other modules
+chat_websocket_manager = ChatWebSocketManager() 

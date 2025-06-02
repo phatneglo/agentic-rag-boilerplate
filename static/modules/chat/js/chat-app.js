@@ -26,6 +26,10 @@ class ChatApp {
         this.currentRequestId = null;
         this.stopSignalSent = false;
         
+        // Enhanced memory state
+        this.currentSessionId = null;
+        this.currentUserId = null;
+        
         // Streaming state
         this.currentStreamingMessage = null;
         this.currentStreamingArtifacts = null;
@@ -167,6 +171,19 @@ class ChatApp {
             this.wsManager.on('disconnected', () => {
                 this.isConnected = false;
                 this.updateConnectionStatus(false);
+            });
+
+            // Enhanced memory system events
+            this.wsManager.on('session_initialized', (data) => {
+                this.handleSessionInitialized(data);
+            });
+
+            this.wsManager.on('session_history', (data) => {
+                this.handleSessionHistory(data);
+            });
+
+            this.wsManager.on('session_info', (data) => {
+                this.handleSessionInfo(data);
             });
 
             // Multi-agent streaming events
@@ -478,9 +495,16 @@ class ChatApp {
             this.adjustTextareaHeight();
             this.hideUploadArea();
             
-            // Send via WebSocket using the correct method
+            // Send via WebSocket using enhanced memory system
             this.currentRequestId = this.generateRequestId();
-            this.wsManager.sendChatMessage(content, this.currentFiles);
+            
+            // Use the correct parameter order: content, context, attachments
+            const context = {
+                requestId: this.currentRequestId,
+                timestamp: Date.now()
+            };
+            
+            this.wsManager.sendChatMessage(content, context, this.currentFiles);
             
         } catch (error) {
             console.error('Send message error:', error);
@@ -968,6 +992,20 @@ class ChatApp {
      * Handle response complete
      */
     handleResponseComplete(data) {
+        // Handle memory metadata if present
+        if (data.memory) {
+            const { session_id, memory_loaded, message_count, primary_agent } = data.memory;
+            console.log('💾 MEMORY: Response completed with metadata', {
+                sessionId: session_id,
+                memoryLoaded: memory_loaded,
+                messageCount: message_count,
+                primaryAgent: primary_agent
+            });
+            
+            // Update session tracking
+            this.currentSessionId = session_id;
+        }
+        
         // Finalize streaming message
         if (this.currentStreamingMessage) {
             this.messagesManager.finalizeStreamingMessage(this.currentStreamingMessage, data);
@@ -1127,6 +1165,59 @@ class ChatApp {
         
         // Show notification
         this.showNotification(`${agent} Agent Error: ${error}`, 'error');
+    }
+
+    /**
+     * Handle enhanced memory session initialized
+     */
+    handleSessionInitialized(data) {
+        const { sessionId, userId } = data;
+        console.log('🧠 MEMORY: Session initialized in UI', { sessionId, userId });
+        
+        // Update UI to show session info
+        this.showNotification(`Chat session started (${sessionId.slice(0, 8)}...)`, 'success');
+        
+        // Store session info for potential future use
+        this.currentSessionId = sessionId;
+        this.currentUserId = userId;
+    }
+
+    /**
+     * Handle session history loaded
+     */
+    handleSessionHistory(data) {
+        const { sessionId, history, stats } = data;
+        console.log('📚 MEMORY: Session history loaded in UI', { sessionId, messageCount: history.length, stats });
+        
+        // Clear current messages
+        this.messagesManager.clearMessages();
+        
+        // Load history messages into the UI
+        history.forEach(msg => {
+            if (msg.type === 'human') {
+                this.messagesManager.addUserMessage(msg.content, []);
+            } else if (msg.type === 'ai') {
+                this.messagesManager.addAIMessage(msg.content, []);
+            }
+        });
+        
+        // Show notification about loaded history
+        this.showNotification(`Loaded ${history.length} messages from chat history`, 'info');
+    }
+
+    /**
+     * Handle session info
+     */
+    handleSessionInfo(data) {
+        console.log('📋 MEMORY: Session info received', data);
+        
+        // Update current session tracking
+        if (data.session_id) {
+            this.currentSessionId = data.session_id;
+        }
+        if (data.user_id) {
+            this.currentUserId = data.user_id;
+        }
     }
 }
 

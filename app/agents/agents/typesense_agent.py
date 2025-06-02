@@ -15,6 +15,17 @@ from app.core.logging_config import get_logger
 logger = get_logger(__name__)
 settings = get_settings()
 
+import typesense
+import json
+from datetime import datetime
+import os
+
+# TypeSense Configuration
+TYPESENSE_HOST = os.getenv("TYPESENSE_HOST", "localhost")
+TYPESENSE_PORT = os.getenv("TYPESENSE_PORT", "8108")
+TYPESENSE_API_KEY = os.getenv("TYPESENSE_API_KEY", "xyz")
+TYPESENSE_PROTOCOL = os.getenv("TYPESENSE_PROTOCOL", "http")
+TYPESENSE_COLLECTION_NAME = os.getenv("TYPESENSE_COLLECTION_NAME", "documents")
 
 class TypeSenseAgent(BaseAgent):
     """
@@ -141,6 +152,7 @@ TYPESENSE_HOST = os.getenv("TYPESENSE_HOST", "localhost")
 TYPESENSE_PORT = os.getenv("TYPESENSE_PORT", "8108")
 TYPESENSE_API_KEY = os.getenv("TYPESENSE_API_KEY", "xyz")
 TYPESENSE_PROTOCOL = os.getenv("TYPESENSE_PROTOCOL", "http")
+TYPESENSE_COLLECTION_NAME = os.getenv("TYPESENSE_COLLECTION_NAME", "documents")
 
 class TypeSenseManager:
     def __init__(self):
@@ -216,7 +228,7 @@ class TypeSenseManager:
 
 # Example schema for documents
 DOCUMENT_SCHEMA = {{
-    'name': 'documents',
+    'name': TYPESENSE_COLLECTION_NAME,
     'fields': [
         {{'name': 'id', 'type': 'string'}},
         {{'name': 'title', 'type': 'string'}},
@@ -233,7 +245,7 @@ if __name__ == "__main__":
     manager = TypeSenseManager()
     
     # Create collection
-    # manager.create_collection('documents', DOCUMENT_SCHEMA)
+    # manager.create_collection(TYPESENSE_COLLECTION_NAME, DOCUMENT_SCHEMA)
     
     # Index a document
     # sample_doc = {{
@@ -244,16 +256,16 @@ if __name__ == "__main__":
     #     'created_at': int(datetime.now().timestamp()),
     #     'tags': ['sample', 'test', 'document']
     # }}
-    # manager.index_document('documents', sample_doc)
+    # manager.index_document(TYPESENSE_COLLECTION_NAME, sample_doc)
     
     # Search documents
-    # results = manager.search_documents('documents', 'sample', facet_by='category,tags')
+    # results = manager.search_documents(TYPESENSE_COLLECTION_NAME, 'sample', facet_by='category,tags')
     # if results:
     #     for hit in results['hits']:
     #         print(f"{{hit['document']['title']}}: {{hit['document']['content'][:100]}}")
     
     # Get collection info
-    # manager.get_collection_info('documents')
+    # manager.get_collection_info(TYPESENSE_COLLECTION_NAME)
 '''
         
         return script_template.format(user_input=user_input)

@@ -480,7 +480,7 @@ async def search_documents(
         
         # Execute search
         try:
-            results = client.collections['documents'].documents.search(search_params)
+            results = client.collections[settings.typesense_collection_name].documents.search(search_params)
             
             # Format response for File Browser
             response = {
@@ -497,7 +497,7 @@ async def search_documents(
                 "metadata": {
                     "search_params": search_params,
                     "vector_search_enabled": use_vector_search,
-                    "collection": "documents"
+                    "collection": settings.typesense_collection_name
                 }
             }
             
@@ -555,7 +555,7 @@ async def search_documents(
                 detail={
                     "error": "Not Found",
                     "message": "Documents collection not found. Please index some documents first.",
-                    "collection": "documents"
+                    "collection": settings.typesense_collection_name
                 }
             )
             

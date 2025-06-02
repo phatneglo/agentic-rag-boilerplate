@@ -42,12 +42,14 @@ class Settings(BaseSettings):
     typesense_port: int = Field(default=8108, env="TYPESENSE_PORT")
     typesense_api_key: str = Field(default="", env="TYPESENSE_API_KEY")
     typesense_protocol: str = Field(default="http", env="TYPESENSE_PROTOCOL")
+    typesense_collection_name: str = Field(default="documents", env="TYPESENSE_COLLECTION_NAME")
     
     # Qdrant Configuration
     qdrant_host: str = Field(default="localhost", env="QDRANT_HOST")
     qdrant_port: int = Field(default=6333, env="QDRANT_PORT")
     qdrant_api_key: str = Field(default="", env="QDRANT_API_KEY")
     qdrant_protocol: str = Field(default="http", env="QDRANT_PROTOCOL")
+    qdrant_collection_name: str = Field(default="documents_rag", env="QDRANT_COLLECTION_NAME")
     
     # Service URLs
     document_service_url: str = Field(default="http://localhost:8001", env="DOCUMENT_SERVICE_URL")

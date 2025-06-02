@@ -40,7 +40,7 @@ class QdrantIndexerWorker:
         self.qdrant_client = None
         self.vector_store = None
         self.index = None
-        self.collection_name = "documents_rag"
+        self.collection_name = settings.qdrant_collection_name
         self.node_parser = None
         self.openai_api_key = settings.openai_api_key
         self.qdrant_host = settings.qdrant_host

@@ -386,4 +386,33 @@ This project is licensed under the MIT License - see the [LICENSE](LICENSE) file
 - **Qdrant** for vector storage
 - **Marker** for PDF processing
 - **FastAPI** for the web framework
-- **BullMQ** for queue management 
+- **BullMQ** for queue management
+
+# Configuration
+
+The application uses environment variables for configuration. Copy `.env.example` to `.env` and customize:
+
+```bash
+cp .env.example .env
+# Edit .env with your OpenAI API key and other settings
+```
+
+## Key Environment Variables
+
+### API Keys
+- `OPENAI_API_KEY` - Your OpenAI API key for embeddings and LLM operations
+
+### Database Configuration
+- `REDIS_URL` - Redis connection URL (default: redis://localhost:6379)
+- `TYPESENSE_URL` - Typesense server URL (default: http://localhost:8108)
+- `QDRANT_URL` - Qdrant server URL (default: http://localhost:6333)
+
+### Collection Names (Configurable)
+- `TYPESENSE_COLLECTION_NAME` - Typesense collection name (default: "documents")
+- `QDRANT_COLLECTION_NAME` - Qdrant collection name (default: "documents_rag")
+
+### Processing Configuration
+- `MAX_RETRIES` - Maximum job retries (default: 3)
+- `WORKER_CONCURRENCY` - Worker concurrency level (default: 4)
+- `CHUNK_SIZE` - Document chunk size for processing (default: 512)
+- `EMBEDDING_MODEL` - OpenAI embedding model (default: text-embedding-3-small) 

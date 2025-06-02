@@ -159,6 +159,7 @@ QDRANT_HOST = os.getenv("QDRANT_HOST", "localhost")
 QDRANT_PORT = int(os.getenv("QDRANT_PORT", "6333"))
 QDRANT_API_KEY = os.getenv("QDRANT_API_KEY", "")
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", "")
+QDRANT_COLLECTION_NAME = os.getenv("QDRANT_COLLECTION_NAME", "documents_rag")
 
 class QdrantRAGManager:
     def __init__(self):
@@ -326,7 +327,7 @@ async def main():
     manager = QdrantRAGManager()
     
     # Create collection
-    # manager.create_collection("knowledge_base")
+    # manager.create_collection(QDRANT_COLLECTION_NAME)
     
     # Index sample documents
     # sample_docs = [
@@ -339,10 +340,10 @@ async def main():
     #     {{"source": "ML_basics.pdf", "topic": "ML"}},
     #     {{"source": "NLP_intro.pdf", "topic": "NLP"}}
     # ]
-    # manager.index_documents("knowledge_base", sample_docs, metadata)
+    # manager.index_documents(QDRANT_COLLECTION_NAME, sample_docs, metadata)
     
     # Perform RAG query
-    # result = await manager.rag_query("knowledge_base", "What is machine learning?")
+    # result = await manager.rag_query(QDRANT_COLLECTION_NAME, "What is machine learning?")
     # print("Answer:", result["answer"])
 
 if __name__ == "__main__":

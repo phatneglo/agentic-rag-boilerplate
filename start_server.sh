@@ -31,6 +31,10 @@ QDRANT_URL=http://localhost:6333
 TYPESENSE_API_KEY=xyz
 QDRANT_API_KEY=
 
+# Collection Names
+TYPESENSE_COLLECTION_NAME=documents
+QDRANT_COLLECTION_NAME=documents_rag
+
 # Processing Configuration
 MAX_RETRIES=3
 WORKER_CONCURRENCY=4

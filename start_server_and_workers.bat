@@ -34,6 +34,10 @@ if not exist ".env" (
         echo TYPESENSE_API_KEY=xyz
         echo QDRANT_API_KEY=
         echo.
+        echo # Collection Names
+        echo TYPESENSE_COLLECTION_NAME=documents
+        echo QDRANT_COLLECTION_NAME=documents_rag
+        echo.
         echo # Processing Configuration
         echo MAX_RETRIES=3
         echo WORKER_CONCURRENCY=4

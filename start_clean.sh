@@ -82,6 +82,10 @@ QDRANT_URL=http://localhost:6333
 TYPESENSE_API_KEY=xyz
 QDRANT_API_KEY=
 
+# Collection Names
+TYPESENSE_COLLECTION_NAME=documents
+QDRANT_COLLECTION_NAME=documents_rag
+
 # Processing Configuration
 MAX_RETRIES=3
 WORKER_CONCURRENCY=4
@@ -132,34 +136,45 @@ fi
 echo ""
 echo "🗄️  Step 6: Initializing collections and indexes..."
 
+# Load environment variables from .env file if it exists
+if [ -f ".env" ]; then
+    set -a  # Automatically export all variables
+    source .env
+    set +a  # Stop automatic export
+fi
+
+# Load collection names from .env file
+TYPESENSE_COLLECTION_NAME=${TYPESENSE_COLLECTION_NAME:-documents}
+QDRANT_COLLECTION_NAME=${QDRANT_COLLECTION_NAME:-documents_rag}
+
 # Create Typesense collection
 if curl -s http://localhost:8108/health > /dev/null 2>&1; then
     # Check if collection exists
-    if curl -s "http://localhost:8108/collections/documents" -H "X-TYPESENSE-API-KEY: xyz" > /dev/null 2>&1; then
-        echo "   ℹ️  Typesense 'documents' collection already exists"
+    if curl -s "http://localhost:8108/collections/${TYPESENSE_COLLECTION_NAME}" -H "X-TYPESENSE-API-KEY: xyz" > /dev/null 2>&1; then
+        echo "   ℹ️  Typesense '${TYPESENSE_COLLECTION_NAME}' collection already exists"
     else
         # Create collection with auto-embedding
         curl -X POST 'http://localhost:8108/collections' \
             -H 'X-TYPESENSE-API-KEY: xyz' \
             -H 'Content-Type: application/json' \
-            -d '{
-                "name": "documents",
-                "enable_nested_fields": true,
-                "fields": [
-                    {"name": "id", "type": "string"},
-                    {"name": "title", "type": "string"},
-                    {"name": "description", "type": "string"},
-                    {"name": "tags", "type": "string[]"},
-                    {"name": "file_path", "type": "string"},
-                    {"name": "file_type", "type": "string"},
-                    {"name": "created_at", "type": "string"},
-                    {"name": "user_id", "type": "string"},
-                    {"name": "embedding", "type": "float[]", "embed": {"from": ["title", "description"], "model_config": {"model_name": "openai/text-embedding-3-small"}}}
+            -d "{
+                \"name\": \"${TYPESENSE_COLLECTION_NAME}\",
+                \"enable_nested_fields\": true,
+                \"fields\": [
+                    {\"name\": \"id\", \"type\": \"string\"},
+                    {\"name\": \"title\", \"type\": \"string\"},
+                    {\"name\": \"description\", \"type\": \"string\"},
+                    {\"name\": \"tags\", \"type\": \"string[]\"},
+                    {\"name\": \"file_path\", \"type\": \"string\"},
+                    {\"name\": \"file_type\", \"type\": \"string\"},
+                    {\"name\": \"created_at\", \"type\": \"string\"},
+                    {\"name\": \"user_id\", \"type\": \"string\"},
+                    {\"name\": \"embedding\", \"type\": \"float[]\", \"embed\": {\"from\": [\"title\", \"description\"], \"model_config\": {\"model_name\": \"openai/text-embedding-3-small\"}}}
                 ]
-            }' > /dev/null 2>&1
+            }" > /dev/null 2>&1
         
         if [ $? -eq 0 ]; then
-            echo "   ✅ Typesense 'documents' collection created with auto-embedding"
+            echo "   ✅ Typesense '${TYPESENSE_COLLECTION_NAME}' collection created with auto-embedding"
         else
             echo "   ⚠️  Could not create Typesense collection (check OpenAI API key)"
         fi
@@ -171,11 +186,11 @@ fi
 # Create Qdrant collection
 if curl -s http://localhost:6333/collections > /dev/null 2>&1; then
     # Check if collection exists
-    if curl -s "http://localhost:6333/collections/documents" > /dev/null 2>&1; then
-        echo "   ℹ️  Qdrant 'documents' collection already exists"
+    if curl -s "http://localhost:6333/collections/${QDRANT_COLLECTION_NAME}" > /dev/null 2>&1; then
+        echo "   ℹ️  Qdrant '${QDRANT_COLLECTION_NAME}' collection already exists"
     else
         # Create collection with named vectors
-        curl -X PUT 'http://localhost:6333/collections/documents' \
+        curl -X PUT "http://localhost:6333/collections/${QDRANT_COLLECTION_NAME}" \
             -H 'Content-Type: application/json' \
             -d '{
                 "vectors": {
@@ -184,7 +199,7 @@ if curl -s http://localhost:6333/collections > /dev/null 2>&1; then
             }' > /dev/null 2>&1
         
         if [ $? -eq 0 ]; then
-            echo "   ✅ Qdrant 'documents' collection created with named vectors"
+            echo "   ✅ Qdrant '${QDRANT_COLLECTION_NAME}' collection created with named vectors"
         else
             echo "   ⚠️  Could not create Qdrant collection"
         fi

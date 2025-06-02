@@ -33,7 +33,7 @@ class TypesenseIndexerWorker:
         self.worker = None
         self.redis_connection = None
         self.typesense_client = None
-        self.collection_name = "documents"
+        self.collection_name = settings.typesense_collection_name
         self.is_running = False
     
     async def setup(self):

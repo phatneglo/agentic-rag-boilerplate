@@ -40,6 +40,20 @@ class DocumentConverterWorker:
         self.is_running = False
         self.shutdown_event = asyncio.Event()
     
+    def _safe_get_option(self, options: Any, key: str, default: Any = None) -> Any:
+        """Safely extract an option value, handling both dict and JSON string formats."""
+        if isinstance(options, dict):
+            return options.get(key, default)
+        elif isinstance(options, str):
+            try:
+                import json
+                parsed_options = json.loads(options)
+                return parsed_options.get(key, default)
+            except (json.JSONDecodeError, ValueError):
+                return default
+        else:
+            return default
+    
     async def setup(self):
         """Setup worker and load Marker models."""
         try:
@@ -121,7 +135,21 @@ class DocumentConverterWorker:
             document_id = job_data["document_id"]
             source_path = job_data["source_path"]
             output_path = job_data["output_path"]
-            conversion_options = job_data.get("conversion_options", {})
+            
+            # Safely parse conversion_options - it might be a JSON string
+            conversion_options_raw = job_data.get("conversion_options", {})
+            if isinstance(conversion_options_raw, str):
+                try:
+                    import json
+                    conversion_options = json.loads(conversion_options_raw)
+                except (json.JSONDecodeError, ValueError):
+                    logger.warning("Failed to parse conversion_options JSON, using defaults", raw_options=conversion_options_raw)
+                    conversion_options = {}
+            elif isinstance(conversion_options_raw, dict):
+                conversion_options = conversion_options_raw
+            else:
+                logger.warning("Unexpected conversion_options type, using defaults", type=type(conversion_options_raw))
+                conversion_options = {}
             
             # Update job progress
             await job.updateProgress(10)
@@ -243,8 +271,11 @@ class DocumentConverterWorker:
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(full_text)
             
+            # Safely get save_images option
+            save_images = self._safe_get_option(options, "save_images", False)
+            
             # Save images if any (optional)
-            if images and options.get("save_images", False):
+            if images and save_images:
                 images_dir = os.path.join(os.path.dirname(output_path), "images")
                 os.makedirs(images_dir, exist_ok=True)
                 for filename, image_data in images.items():
@@ -252,9 +283,17 @@ class DocumentConverterWorker:
                     with open(image_path, 'wb') as f:
                         f.write(image_data)
             
+            # Safely handle metadata - it might be a string or dict
+            page_stats = []
+            if isinstance(out_meta, dict):
+                page_stats = out_meta.get("page_stats", [])
+            elif isinstance(out_meta, str):
+                # If metadata is a string, try to parse basic info
+                page_stats = [{"info": out_meta}]
+            
             return {
                 "format": "pdf",
-                "pages_processed": out_meta.get("page_stats", []),
+                "pages_processed": page_stats,
                 "images_extracted": len(images) if images else 0,
                 "output_size": len(full_text),
                 "metadata": out_meta,
@@ -288,9 +327,16 @@ class DocumentConverterWorker:
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(full_text)
             
+            # Safely handle metadata
+            slide_stats = []
+            if isinstance(out_meta, dict):
+                slide_stats = out_meta.get("page_stats", [])
+            elif isinstance(out_meta, str):
+                slide_stats = [{"info": out_meta}]
+            
             return {
                 "format": "pptx", 
-                "slides_processed": out_meta.get("page_stats", []),
+                "slides_processed": slide_stats,
                 "images_extracted": len(images) if images else 0,
                 "output_size": len(full_text),
                 "metadata": out_meta,
@@ -324,9 +370,16 @@ class DocumentConverterWorker:
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(full_text)
             
+            # Safely handle metadata
+            sheet_stats = []
+            if isinstance(out_meta, dict):
+                sheet_stats = out_meta.get("page_stats", [])
+            elif isinstance(out_meta, str):
+                sheet_stats = [{"info": out_meta}]
+            
             return {
                 "format": "xlsx",
-                "sheets_processed": out_meta.get("page_stats", []),
+                "sheets_processed": sheet_stats,
                 "output_size": len(full_text),
                 "metadata": out_meta,
                 "success": True
@@ -357,9 +410,16 @@ class DocumentConverterWorker:
             with open(output_path, 'w', encoding='utf-8') as f:
                 f.write(full_text)
             
+            # Safely handle metadata
+            chapter_stats = []
+            if isinstance(out_meta, dict):
+                chapter_stats = out_meta.get("page_stats", [])
+            elif isinstance(out_meta, str):
+                chapter_stats = [{"info": out_meta}]
+            
             return {
                 "format": "epub",
-                "chapters_processed": out_meta.get("page_stats", []),
+                "chapters_processed": chapter_stats,
                 "output_size": len(full_text),
                 "metadata": out_meta,
                 "success": True

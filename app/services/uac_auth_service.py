@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """
-PHPMaker Authentication Service
+UAC Authentication Service
 
-Handles JWT authentication with PHPMaker API based on the PHPMaker API documentation:
-https://phpmaker.dev/docs2024/api.html
+Handles JWT authentication with UAC API based on the UAC API documentation.
 
 This service provides:
-- JWT token acquisition from PHPMaker login API with user credentials
+- JWT token acquisition from UAC login API with user credentials
 - Token caching per user session
 - Authentication headers for API requests
 - User info extraction from JWT response
@@ -26,26 +25,26 @@ from app.core.logging_config import get_logger
 logger = get_logger(__name__)
 
 
-class PHPMakerAuthService:
+class UACAuthService:
     """
-    Service to handle PHPMaker API authentication and JWT management.
+    Service to handle UAC API authentication and JWT management.
     
-    Based on PHPMaker API documentation:
+    Based on UAC API documentation:
     - POST /api/login for authentication
     - Returns JWT token for subsequent API calls
     - Handles token expiration and refresh
     """
     
     def __init__(self):
-        self.api_url = settings.phpmaker_api_url.rstrip('/')
-        self.expire_hours = settings.phpmaker_jwt_expire_hours
-        self.permission = settings.phpmaker_jwt_permission
-        self.use_ssl = settings.phpmaker_use_ssl
+        self.api_url = settings.uac_api_url.rstrip('/')
+        self.expire_hours = settings.uac_jwt_expire_hours
+        self.permission = settings.uac_jwt_permission
+        self.use_ssl = settings.uac_use_ssl
         
         # Session management
         self._session: Optional[aiohttp.ClientSession] = None
         
-        logger.info(f"PHPMaker Auth Service initialized for: {self.api_url}")
+        logger.info(f"UAC Auth Service initialized for: {self.api_url}")
     
     async def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session."""
@@ -67,7 +66,7 @@ class PHPMakerAuthService:
     
     async def login_user(self, username: str, password: str, security_code: Optional[str] = None) -> Dict[str, Any]:
         """
-        Login user to PHPMaker API and get JWT token with user info.
+        Login user to UAC API and get JWT token with user info.
         
         Args:
             username: User's username
@@ -107,7 +106,7 @@ class PHPMakerAuthService:
             
             session = await self._get_session()
             
-            logger.info(f"Attempting PHPMaker login for user: {username}")
+            logger.info(f"Attempting UAC login for user: {username}")
             
             async with session.post(
                 login_url,
@@ -122,21 +121,21 @@ class PHPMakerAuthService:
                     result = await response.json()
                     
                     # Debug: Log the actual response structure
-                    logger.info(f"📋 PHPMaker response structure: {json.dumps(result, indent=2)}")
+                    logger.info(f"📋 UAC response structure: {json.dumps(result, indent=2)}")
                     
                     # Extract JWT token from response
                     jwt_token = (
-                        result.get('JWT') or       # PHPMaker uses uppercase 'JWT'
+                        result.get('JWT') or       # UAC uses uppercase 'JWT'
                         result.get('jwt') or 
                         result.get('token') or 
                         result.get('access_token')
                     )
                     
                     if not jwt_token:
-                        logger.error(f"❌ No JWT token in PHPMaker response: {result}")
+                        logger.error(f"❌ No JWT token in UAC response: {result}")
                         return {
                             'success': False,
-                            'error': 'No JWT token received from PHPMaker',
+                            'error': 'No JWT token received from UAC',
                             'response': result
                         }
                     
@@ -204,20 +203,20 @@ class PHPMakerAuthService:
                         'raw_response': result
                     }
                     
-                    logger.info(f"✅ PHPMaker login successful for user: {username} (userid: {user_info['userid']})")
+                    logger.info(f"✅ UAC login successful for user: {username} (userid: {user_info['userid']})")
                     return user_info
                     
                 else:
                     error_text = await response.text()
-                    logger.error(f"❌ PHPMaker login failed: {response.status} - {error_text}")
+                    logger.error(f"❌ UAC login failed: {response.status} - {error_text}")
                     return {
                         'success': False,
-                        'error': f"PHPMaker login failed: {response.status} - {error_text}",
+                        'error': f"UAC login failed: {response.status} - {error_text}",
                         'status_code': response.status
                     }
                     
         except Exception as e:
-            logger.error(f"❌ PHPMaker login error: {e}")
+            logger.error(f"❌ UAC login error: {e}")
             return {
                 'success': False,
                 'error': str(e)
@@ -233,7 +232,7 @@ class PHPMakerAuthService:
         params: Optional[Dict] = None
     ) -> Dict[str, Any]:
         """
-        Make authenticated request to PHPMaker API using JWT token.
+        Make authenticated request to UAC API using JWT token.
         
         Args:
             jwt_token: Valid JWT token from login
@@ -275,15 +274,15 @@ class PHPMakerAuthService:
                     return await response.json()
                 else:
                     error_text = await response.text()
-                    logger.error(f"❌ PHPMaker API error: {response.status} - {error_text}")
+                    logger.error(f"❌ UAC API error: {response.status} - {error_text}")
                     return {
                         'success': False,
-                        'error': f"PHPMaker API error: {response.status} - {error_text}",
+                        'error': f"UAC API error: {response.status} - {error_text}",
                         'status_code': response.status
                     }
                     
         except Exception as e:
-            logger.error(f"❌ PHPMaker API request failed: {e}")
+            logger.error(f"❌ UAC API request failed: {e}")
             return {
                 'success': False,
                 'error': str(e)
@@ -291,13 +290,13 @@ class PHPMakerAuthService:
     
     async def test_connection(self) -> bool:
         """
-        Test connection to PHPMaker API.
+        Test connection to UAC API.
         
         Returns:
             bool: True if connection successful
         """
         try:
-            logger.info("Testing PHPMaker API connection...")
+            logger.info("Testing UAC API connection...")
             
             # Just test if we can reach the API endpoint
             session = await self._get_session()
@@ -305,11 +304,11 @@ class PHPMakerAuthService:
             
             async with session.get(login_url) as response:
                 # We expect this to fail (401/405) but connection should work
-                logger.info(f"✅ PHPMaker API connection test successful (status: {response.status})")
+                logger.info(f"✅ UAC API connection test successful (status: {response.status})")
                 return True
                 
         except Exception as e:
-            logger.error(f"❌ PHPMaker API connection test failed: {e}")
+            logger.error(f"❌ UAC API connection test failed: {e}")
             return False
     
     def is_token_expired(self, expires_at: str) -> bool:
@@ -332,24 +331,24 @@ class PHPMakerAuthService:
 
 
 # Global instance
-phpmaker_auth = PHPMakerAuthService()
+uac_auth = UACAuthService()
 
 
-async def get_phpmaker_auth() -> PHPMakerAuthService:
-    """Get PHPMaker authentication service instance."""
-    return phpmaker_auth
+async def get_uac_auth() -> UACAuthService:
+    """Get UAC authentication service instance."""
+    return uac_auth
 
 
 # Example usage
 async def example_usage():
-    """Example of how to use the PHPMaker Auth Service."""
+    """Example of how to use the UAC Auth Service."""
     
     # Test connection
-    if await phpmaker_auth.test_connection():
-        print("✅ Connected to PHPMaker API")
+    if await uac_auth.test_connection():
+        print("✅ Connected to UAC API")
         
         # Login user (replace with actual credentials)
-        login_result = await phpmaker_auth.login_user("your_username", "your_password")
+        login_result = await uac_auth.login_user("your_username", "your_password")
         
         if login_result.get('success'):
             print(f"✅ Login successful!")
@@ -363,7 +362,7 @@ async def example_usage():
             # Make authenticated requests
             try:
                 # Example: Get list of records from 'cars' table
-                cars = await phpmaker_auth.make_authenticated_request(
+                cars = await uac_auth.make_authenticated_request(
                     jwt_token,
                     'GET', 
                     'list/cars',
@@ -378,9 +377,9 @@ async def example_usage():
             print(f"❌ Login failed: {login_result.get('error')}")
         
         # Close session
-        await phpmaker_auth.close()
+        await uac_auth.close()
     else:
-        print("❌ Failed to connect to PHPMaker API")
+        print("❌ Failed to connect to UAC API")
 
 
 if __name__ == "__main__":

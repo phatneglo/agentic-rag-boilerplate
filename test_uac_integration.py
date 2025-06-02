@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Test PHPMaker Integration
+Test UAC Integration
 
-This script demonstrates the complete PHPMaker authentication flow:
+This script demonstrates the complete UAC authentication flow:
 1. Login with user credentials -> Get JWT and session
 2. Use session to make authenticated API requests
 3. Handle session management
 
 Setup:
 1. Set environment variables:
-   - PHPMAKER_API_URL=https://your-phpmaker-app.com/api
+   - UAC_API_URL=https://your-uac-app.com/api
 2. Update this script with actual user credentials
 3. Run the test
 """
@@ -26,8 +26,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from app.core.config import settings
 
 
-class PHPMakerIntegrationTest:
-    """Test class for PHPMaker integration."""
+class UACIntegrationTest:
+    """Test class for UAC integration."""
     
     def __init__(self):
         self.api_base_url = "http://localhost:8000"
@@ -46,11 +46,11 @@ class PHPMakerIntegrationTest:
             await self.session.close()
     
     async def test_connection(self):
-        """Test connection to PHPMaker API through our service."""
-        print("🔗 Testing PHPMaker API connection...")
+        """Test connection to UAC API through our service."""
+        print("🔗 Testing UAC API connection...")
         
         try:
-            async with self.session.get(f"{self.api_base_url}/api/v1/phpmaker-auth/test-connection") as response:
+            async with self.session.get(f"{self.api_base_url}/api/v1/uac-auth/test-connection") as response:
                 result = await response.json()
                 
                 if result.get('success'):
@@ -65,7 +65,7 @@ class PHPMakerIntegrationTest:
             return False
     
     async def login(self, username: str, password: str, security_code: str = None):
-        """Login to PHPMaker through our authentication service."""
+        """Login to UAC through our authentication service."""
         print(f"🔐 Logging in user: {username}")
         
         try:
@@ -78,7 +78,7 @@ class PHPMakerIntegrationTest:
                 login_data["security_code"] = security_code
             
             async with self.session.post(
-                f"{self.api_base_url}/api/v1/phpmaker-auth/login",
+                f"{self.api_base_url}/api/v1/uac-auth/login",
                 json=login_data
             ) as response:
                 
@@ -116,7 +116,7 @@ class PHPMakerIntegrationTest:
         
         try:
             async with self.session.get(
-                f"{self.api_base_url}/api/v1/phpmaker-auth/session/{self.session_id}"
+                f"{self.api_base_url}/api/v1/uac-auth/session/{self.session_id}"
             ) as response:
                 
                 result = await response.json()
@@ -139,13 +139,13 @@ class PHPMakerIntegrationTest:
             print(f"❌ Session info error: {e}")
             return None
     
-    async def make_phpmaker_request(self, method: str, endpoint: str, data=None, json_data=None, params=None):
-        """Make authenticated request to PHPMaker API."""
+    async def make_uac_request(self, method: str, endpoint: str, data=None, json_data=None, params=None):
+        """Make authenticated request to UAC API."""
         if not self.session_id:
             print("❌ No active session for API request")
             return None
         
-        print(f"🌐 Making PHPMaker API request: {method} {endpoint}")
+        print(f"🌐 Making UAC API request: {method} {endpoint}")
         
         try:
             request_data = {
@@ -162,21 +162,21 @@ class PHPMakerIntegrationTest:
                 request_data["params"] = params
             
             async with self.session.post(
-                f"{self.api_base_url}/api/v1/phpmaker-auth/request",
+                f"{self.api_base_url}/api/v1/uac-auth/request",
                 json=request_data
             ) as response:
                 
                 result = await response.json()
                 
                 if response.status == 200 and not result.get('error'):
-                    print("✅ PHPMaker API request successful")
+                    print("✅ UAC API request successful")
                     return result
                 else:
-                    print(f"❌ PHPMaker API request failed: {result}")
+                    print(f"❌ UAC API request failed: {result}")
                     return result
                     
         except Exception as e:
-            print(f"❌ PHPMaker API request error: {e}")
+            print(f"❌ UAC API request error: {e}")
             return None
     
     async def logout(self):
@@ -189,7 +189,7 @@ class PHPMakerIntegrationTest:
         
         try:
             async with self.session.delete(
-                f"{self.api_base_url}/api/v1/phpmaker-auth/logout/{self.session_id}"
+                f"{self.api_base_url}/api/v1/uac-auth/logout/{self.session_id}"
             ) as response:
                 
                 result = await response.json()
@@ -207,21 +207,21 @@ class PHPMakerIntegrationTest:
 
 async def main():
     """Main test function."""
-    print("🧪 PHPMaker Integration Test")
+    print("🧪 UAC Integration Test")
     print("=" * 60)
     
     # Check configuration
     print(f"📋 Configuration:")
-    print(f"   API URL: {settings.phpmaker_api_url}")
-    print(f"   Use SSL: {settings.phpmaker_use_ssl}")
+    print(f"   API URL: {settings.uac_api_url}")
+    print(f"   Use SSL: {settings.uac_use_ssl}")
     print()
     
-    if not settings.phpmaker_api_url:
-        print("❌ PHPMaker API URL not configured!")
-        print("Please set PHPMAKER_API_URL environment variable")
+    if not settings.uac_api_url:
+        print("❌ UAC API URL not configured!")
+        print("Please set UAC_API_URL environment variable")
         return
     
-    async with PHPMakerIntegrationTest() as test:
+    async with UACIntegrationTest() as test:
         
         # Test 1: Connection test
         print("=" * 60)
@@ -234,11 +234,11 @@ async def main():
         # Test 2: Login (replace with actual credentials)
         print("=" * 60)
         print("🔐 Login Test")
-        print("⚠️  Update the credentials below with actual PHPMaker credentials")
+        print("⚠️  Update the credentials below with actual UAC credentials")
         
         # TODO: Replace these with actual credentials or prompt for input
-        username = input("Enter PHPMaker username: ").strip()
-        password = input("Enter PHPMaker password: ").strip()
+        username = input("Enter UAC username: ").strip()
+        password = input("Enter UAC password: ").strip()
         
         if not username or not password:
             print("❌ Username and password are required")
@@ -256,15 +256,15 @@ async def main():
         await test.get_session_info()
         print()
         
-        # Test 4: PHPMaker API requests (examples)
+        # Test 4: UAC API requests (examples)
         print("=" * 60)
-        print("🌐 PHPMaker API Request Tests")
+        print("🌐 UAC API Request Tests")
         
         # Example 1: List records (replace 'cars' with actual table name)
         table_name = input("Enter table name to test (e.g., 'cars', or press Enter to skip): ").strip()
         
         if table_name:
-            result = await test.make_phpmaker_request(
+            result = await test.make_uac_request(
                 method="GET",
                 endpoint=f"list/{table_name}",
                 params={"recperpage": 5}
@@ -303,16 +303,16 @@ async def main():
 
 if __name__ == "__main__":
     print("""
-🚀 PHPMaker Integration Setup
+🚀 UAC Integration Setup
 
 Before running this test, make sure:
 
 1. Set environment variable:
-   PHPMAKER_API_URL=https://your-phpmaker-app.com/api
+   UAC_API_URL=https://your-uac-app.com/api
 
-2. Your PHPMaker application has API enabled
+2. Your UAC application has API enabled
 
-3. You have valid PHPMaker user credentials
+3. You have valid UAC user credentials
 
 4. Your document processing API server is running on localhost:8000
 

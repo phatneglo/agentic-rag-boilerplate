@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Test PHPMaker Authentication Service
+Test UAC Authentication Service
 
-This script demonstrates how to use the PHPMaker authentication service
+This script demonstrates how to use the UAC authentication service
 with dynamic user credentials (no hardcoded username/password).
 
 Usage:
-1. Set PHPMAKER_API_URL environment variable
+1. Set UAC_API_URL environment variable
 2. Run this script and provide credentials when prompted
 """
 
@@ -17,35 +17,35 @@ import os
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.services.phpmaker_auth_service import phpmaker_auth
+from app.services.uac_auth_service import uac_auth
 from app.core.config import settings
 
 
-async def test_phpmaker_auth():
-    """Test PHPMaker authentication service with dynamic credentials."""
+async def test_uac_auth():
+    """Test UAC authentication service with dynamic credentials."""
     
-    print("🧪 Testing PHPMaker Authentication Service")
+    print("🧪 Testing UAC Authentication Service")
     print("=" * 60)
     
     # Check configuration
     print(f"📋 Configuration:")
-    print(f"   API URL: {settings.phpmaker_api_url}")
-    print(f"   Expire Hours: {settings.phpmaker_jwt_expire_hours}")
-    print(f"   Permission: {settings.phpmaker_jwt_permission}")
-    print(f"   Use SSL: {settings.phpmaker_use_ssl}")
+    print(f"   API URL: {settings.uac_api_url}")
+    print(f"   Expire Hours: {settings.uac_jwt_expire_hours}")
+    print(f"   Permission: {settings.uac_jwt_permission}")
+    print(f"   Use SSL: {settings.uac_use_ssl}")
     print()
     
     # Check if basic configuration is complete
-    if not settings.phpmaker_api_url:
-        print("❌ PHPMaker configuration incomplete!")
-        print("Please set PHPMAKER_API_URL environment variable")
-        print("Example: PHPMAKER_API_URL=https://your-app.com/api")
+    if not settings.uac_api_url:
+        print("❌ UAC configuration incomplete!")
+        print("Please set UAC_API_URL environment variable")
+        print("Example: UAC_API_URL=https://your-app.com/api")
         return
     
     try:
         # Test 1: Connection test
         print("🔗 Test 1: Testing connection...")
-        is_connected = await phpmaker_auth.test_connection()
+        is_connected = await uac_auth.test_connection()
         
         if is_connected:
             print("✅ Connection successful!")
@@ -57,8 +57,8 @@ async def test_phpmaker_auth():
         
         # Test 2: Get user credentials
         print("🔐 Test 2: User Authentication")
-        username = input("Enter PHPMaker username: ").strip()
-        password = input("Enter PHPMaker password: ").strip()
+        username = input("Enter UAC username: ").strip()
+        password = input("Enter UAC password: ").strip()
         
         if not username or not password:
             print("❌ Username and password are required")
@@ -66,7 +66,7 @@ async def test_phpmaker_auth():
         
         # Test 3: Login user
         print(f"🎫 Test 3: Logging in user: {username}")
-        login_result = await phpmaker_auth.login_user(username, password)
+        login_result = await uac_auth.login_user(username, password)
         
         if login_result.get('success'):
             print("✅ Login successful!")
@@ -93,7 +93,7 @@ async def test_phpmaker_auth():
         
         if table_name:
             try:
-                response = await phpmaker_auth.make_authenticated_request(
+                response = await uac_auth.make_authenticated_request(
                     jwt_token=jwt_token,
                     method='GET',
                     endpoint=f'list/{table_name}',
@@ -120,7 +120,7 @@ async def test_phpmaker_auth():
         # Test 5: Token expiration check
         print("🔄 Test 5: Token expiration check...")
         expires_at = login_result['expires_at']
-        is_expired = phpmaker_auth.is_token_expired(expires_at)
+        is_expired = uac_auth.is_token_expired(expires_at)
         print(f"   Token expires at: {expires_at}")
         print(f"   Is expired: {is_expired}")
         print()
@@ -134,12 +134,12 @@ async def test_phpmaker_auth():
     
     finally:
         # Clean up
-        await phpmaker_auth.close()
+        await uac_auth.close()
         print("🧹 Cleaned up resources")
 
 
 async def example_integration():
-    """Example of how to integrate PHPMaker auth in your application."""
+    """Example of how to integrate UAC auth in your application."""
     
     print("\n" + "=" * 60)
     print("📋 Integration Example - New Dynamic API")
@@ -148,10 +148,10 @@ async def example_integration():
     print("""
     # Updated integration using dynamic credentials:
     
-    from app.services.phpmaker_auth_service import phpmaker_auth
+    from app.services.uac_auth_service import uac_auth
     
     # 1. Login user with their credentials
-    login_result = await phpmaker_auth.login_user(username, password)
+    login_result = await uac_auth.login_user(username, password)
     
     if login_result.get('success'):
         jwt_token = login_result['jwt']
@@ -159,7 +159,7 @@ async def example_integration():
         userlevel = login_result['userlevel']
         
         # 2. Make authenticated requests using the JWT token
-        data = await phpmaker_auth.make_authenticated_request(
+        data = await uac_auth.make_authenticated_request(
             jwt_token=jwt_token,
             method='GET', 
             endpoint='list/your_table',
@@ -167,7 +167,7 @@ async def example_integration():
         )
         
         # 3. Add new record
-        new_record = await phpmaker_auth.make_authenticated_request(
+        new_record = await uac_auth.make_authenticated_request(
             jwt_token=jwt_token,
             method='POST',
             endpoint='add/your_table',
@@ -175,7 +175,7 @@ async def example_integration():
         )
         
         # 4. Update record  
-        updated = await phpmaker_auth.make_authenticated_request(
+        updated = await uac_auth.make_authenticated_request(
             jwt_token=jwt_token,
             method='POST',
             endpoint='edit/your_table/123',
@@ -183,7 +183,7 @@ async def example_integration():
         )
         
         # 5. Delete record
-        deleted = await phpmaker_auth.make_authenticated_request(
+        deleted = await uac_auth.make_authenticated_request(
             jwt_token=jwt_token,
             method='GET',
             endpoint='delete/your_table/123'
@@ -194,7 +194,7 @@ async def example_integration():
     # =====================================================================
     
     # 1. Login via API
-    POST /api/v1/phpmaker-auth/login
+    POST /api/v1/uac-auth/login
     {
         "username": "your_username",
         "password": "your_password"
@@ -202,37 +202,37 @@ async def example_integration():
     # Returns: {"session_id": "uuid", "userid": "-1", ...}
     
     # 2. Make authenticated requests via API
-    POST /api/v1/phpmaker-auth/request
+    POST /api/v1/uac-auth/request
     {
         "session_id": "session_uuid",
         "method": "GET",
         "endpoint": "list/your_table",
         "params": {"recperpage": 10}
     }
-    # Returns: PHPMaker API response
+    # Returns: UAC API response
     
     # 3. Get session info
-    GET /api/v1/phpmaker-auth/session/{session_id}
+    GET /api/v1/uac-auth/session/{session_id}
     
     # 4. Logout
-    DELETE /api/v1/phpmaker-auth/logout/{session_id}
+    DELETE /api/v1/uac-auth/logout/{session_id}
     """)
 
 
 if __name__ == "__main__":
     print("""
-🚀 PHPMaker Authentication Test - Dynamic Credentials
+🚀 UAC Authentication Test - Dynamic Credentials
 
 This test now uses dynamic user credentials instead of hardcoded config.
-You'll be prompted to enter your PHPMaker username and password.
+You'll be prompted to enter your UAC username and password.
 
 Setup required:
-1. Set PHPMAKER_API_URL environment variable
-2. Ensure your PHPMaker application has API enabled
-3. Have valid PHPMaker user credentials ready
+1. Set UAC_API_URL environment variable
+2. Ensure your UAC application has API enabled
+3. Have valid UAC user credentials ready
 
 """)
     
     # Run tests
-    asyncio.run(test_phpmaker_auth())
+    asyncio.run(test_uac_auth())
     asyncio.run(example_integration()) 

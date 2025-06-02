@@ -169,7 +169,7 @@ if not errorlevel 1 (
 )
 
 REM Start server in background
-start /B python -m uvicorn app.main:app --reload --host 0.0.0.0 --port %SERVER_PORT% > logs/server.log 2>&1
+start /B python -m uvicorn app.main:app --reload --reload-exclude="logs/*" --reload-exclude="*.log" --reload-exclude="file_storage/*" --reload-exclude="uploads/*" --reload-exclude="processed/*" --host 0.0.0.0 --port %SERVER_PORT% > logs/server.log 2>&1
 echo    ✅ Server started (logs: logs/server.log^)
 
 REM Wait a moment for server to start

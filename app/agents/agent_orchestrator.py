@@ -33,6 +33,47 @@ logger = get_logger(__name__)
 settings = get_settings()
 
 
+def serialize_artifacts_for_db(artifacts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    """
+    Serialize artifacts for database storage by converting ArtifactType enums to strings.
+    This fixes the 'Object of type ArtifactType is not JSON serializable' error.
+    """
+    if not artifacts:
+        return []
+    
+    serialized_artifacts = []
+    for artifact in artifacts:
+        # Create a copy to avoid modifying the original
+        serialized_artifact = artifact.copy()
+        
+        # Convert ArtifactType enum to string if present
+        if 'type' in serialized_artifact and isinstance(serialized_artifact['type'], ArtifactType):
+            serialized_artifact['type'] = serialized_artifact['type'].value
+        
+        # Handle nested data that might contain ArtifactType
+        if 'data' in serialized_artifact and isinstance(serialized_artifact['data'], dict):
+            data_copy = serialized_artifact['data'].copy()
+            for key, value in data_copy.items():
+                if isinstance(value, ArtifactType):
+                    data_copy[key] = value.value
+            serialized_artifact['data'] = data_copy
+        
+        # Handle artifact types in metadata
+        if 'metadata' in serialized_artifact and isinstance(serialized_artifact['metadata'], dict):
+            metadata_copy = serialized_artifact['metadata'].copy()
+            for key, value in metadata_copy.items():
+                if isinstance(value, ArtifactType):
+                    metadata_copy[key] = value.value
+                elif isinstance(value, list):
+                    # Handle lists that might contain ArtifactType
+                    metadata_copy[key] = [item.value if isinstance(item, ArtifactType) else item for item in value]
+            serialized_artifact['metadata'] = metadata_copy
+        
+        serialized_artifacts.append(serialized_artifact)
+    
+    return serialized_artifacts
+
+
 class MessagesState(TypedDict):
     """
     Enhanced state for the agent orchestration workflow following LangGraph best practices.
@@ -239,6 +280,22 @@ class AgentOrchestrator:
         # Context-aware routing scores
         routing_score = {}
         
+        # Document Search keywords (highest priority for TypeSense agent)
+        search_keywords = [
+            "search", "find", "look for", "search documents", "search knowledge base",
+            "find documents", "search files", "document search", "knowledge search",
+            "search my documents", "find in documents", "search content", "search for"
+        ]
+        routing_score["typesense"] = sum(2 for kw in search_keywords if kw in user_input_lower)
+        
+        # Additional boost for explicit document/knowledge base searches
+        if any(phrase in user_input_lower for phrase in [
+            "search documents", "find documents", "search knowledge base",
+            "search my documents", "document search", "search for documents",
+            "find in knowledge base", "search files", "search content"
+        ]):
+            routing_score["typesense"] += 5
+        
         # Code-related keywords
         code_keywords = ["code", "python", "javascript", "sql", "function", "class", "variable",
                        "algorithm", "programming", "debug", "script", "api", "json", "recursive"]
@@ -246,17 +303,35 @@ class AgentOrchestrator:
         if "programming" in conversation_summary or "code" in conversation_summary:
             routing_score["code"] += 2  # Boost if previous context is code-related
         
-        # General conversation (default)
-        routing_score["general"] = 1  # Default score
+        # Document creation keywords
+        doc_creation_keywords = ["write", "create document", "generate report", "draft", "compose"]
+        routing_score["document"] = sum(1 for kw in doc_creation_keywords if kw in user_input_lower)
         
-        # Add more agent routing logic here as needed...
+        # MinIO/storage keywords
+        storage_keywords = ["minio", "storage", "bucket", "upload", "download", "s3", "object storage"]
+        routing_score["minio"] = sum(1 for kw in storage_keywords if kw in user_input_lower)
+        
+        # Qdrant/vector keywords
+        vector_keywords = ["vector", "qdrant", "embedding", "similarity", "semantic"]
+        routing_score["qdrant"] = sum(1 for kw in vector_keywords if kw in user_input_lower)
+        
+        # File display keywords (but not search - that goes to TypeSense)
+        file_keywords = ["display file", "show file", "read file", "file content", "view file"]
+        routing_score["file_display"] = sum(1 for kw in file_keywords if kw in user_input_lower)
+        
+        # General conversation (default with lower score)
+        routing_score["general"] = 1  # Default score
         
         # Select agent with highest score
         selected_agent_name = max(routing_score, key=routing_score.get)
         
-        # Override if no specific keywords found
+        # Override if no specific keywords found (except for search which should go to TypeSense)
         if routing_score[selected_agent_name] <= 1 and selected_agent_name != "general":
-            selected_agent_name = "general"
+            # Check if it's a potential search request that didn't score high enough
+            if any(word in user_input_lower for word in ["search", "find", "look for"]):
+                selected_agent_name = "typesense"
+            else:
+                selected_agent_name = "general"
         
         # Get the actual agent instance
         agent_map = {
@@ -293,13 +368,16 @@ class AgentOrchestrator:
                 }
             )
             
+            # Serialize artifacts to fix JSON serialization issues
+            serialized_artifacts = serialize_artifacts_for_db(agent_response.artifacts)
+            
             # Save AI response
             ai_message = AIMessage(
                 content=agent_response.content,
                 additional_kwargs={
                     "agent_name": selected_agent.name.lower(),
                     "agent_metadata": agent_response.metadata,
-                    "artifacts": agent_response.artifacts,
+                    "artifacts": serialized_artifacts,  # Use serialized artifacts
                     "session_id": session_id
                 }
             )
@@ -314,7 +392,7 @@ class AgentOrchestrator:
                     "user_profile": {},
                     "conversation_context": ""
                 },
-                artifacts=agent_response.artifacts
+                artifacts=serialized_artifacts  # Use serialized artifacts
             )
             
             logger.info(f"💾 MEMORY: Saved exchange to session {session_id}")

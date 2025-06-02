@@ -182,6 +182,13 @@ class ChatArtifacts {
             case 'json':
                 content = this.createJsonArtifact(artifact);
                 break;
+            case 'document_search_results':
+                if (showCode) {
+                    content = this.createCodeView(artifact.content, 'json');
+                } else {
+                    content = this.createSearchResultsArtifact(artifact);
+                }
+                break;
             default:
                 content = this.createTextArtifact(artifact);
         }
@@ -282,16 +289,100 @@ class ChatArtifacts {
     }
 
     /**
-     * Create JSON artifact
+     * Create JSON artifact with syntax highlighting
      */
     createJsonArtifact(artifact) {
+        const formattedJson = JSON.stringify(JSON.parse(artifact.content), null, 2);
+        return `
+            <div class="json-artifact">
+                <pre><code class="language-json">${this.escapeHtml(formattedJson)}</code></pre>
+            </div>
+        `;
+    }
+
+    /**
+     * Create search results artifact with interactive document list
+     */
+    createSearchResultsArtifact(artifact) {
         try {
-            const formatted = JSON.stringify(JSON.parse(artifact.content), null, 2);
-            const escapedContent = this.escapeHtml(formatted);
-            return `<pre><code class="language-json">${escapedContent}</code></pre>`;
-        } catch (e) {
-            return this.createTextArtifact(artifact);
+            // Parse the artifact data
+            let searchData;
+            if (artifact.data) {
+                // Data is already parsed
+                searchData = artifact.data;
+            } else if (artifact.content) {
+                // Parse JSON content
+                searchData = JSON.parse(artifact.content);
+            } else {
+                throw new Error('No search data available');
+            }
+            
+            // Use the search results template if available
+            if (window.searchResultsTemplate) {
+                const templateType = artifact.template || 'search_results_grid';
+                const searchResultsElement = window.searchResultsTemplate.render(searchData, templateType);
+                
+                // Return the HTML
+                const wrapper = document.createElement('div');
+                wrapper.appendChild(searchResultsElement);
+                return wrapper.innerHTML;
+            } else {
+                // Fallback if template not loaded
+                console.warn('Search results template not available, using fallback');
+                return this.createSearchResultsFallback(searchData);
+            }
+            
+        } catch (error) {
+            console.error('Error creating search results artifact:', error);
+            return `
+                <div class="artifact-error">
+                    <h3>Error Rendering Search Results</h3>
+                    <p>Unable to render search results: ${error.message}</p>
+                    <pre>${this.escapeHtml(artifact.content)}</pre>
+                </div>
+            `;
         }
+    }
+    
+    /**
+     * Fallback search results renderer
+     */
+    createSearchResultsFallback(searchData) {
+        const { query, totalResults, results } = searchData;
+        
+        let html = `
+            <div class="search-results-fallback">
+                <div class="search-header-fallback">
+                    <h3>Search Results: "${query}"</h3>
+                    <p>${totalResults} results found</p>
+                </div>
+                <div class="results-list-fallback">
+        `;
+        
+        if (results && results.length > 0) {
+            results.forEach(result => {
+                html += `
+                    <div class="result-item-fallback">
+                        <h4>${result.title}</h4>
+                        <p>${result.description}</p>
+                        <div class="result-meta-fallback">
+                            <span>Category: ${result.category}</span>
+                            <span>Score: ${(result.score * 100).toFixed(0)}%</span>
+                        </div>
+                        ${result.url ? `<a href="${result.url}" target="_blank">Open Document</a>` : ''}
+                    </div>
+                `;
+            });
+        } else {
+            html += '<p>No results found.</p>';
+        }
+        
+        html += `
+                </div>
+            </div>
+        `;
+        
+        return html;
     }
 
     /**
@@ -592,22 +683,23 @@ class ChatArtifacts {
     }
 
     /**
-     * Get artifact type label for display
+     * Get human-readable label for artifact type
      */
     getArtifactTypeLabel(type) {
         const labels = {
             'code': 'Code',
-            'document': 'Document', 
-            'html': 'Web Page',
             'mermaid': 'Diagram',
+            'html': 'HTML',
             'markdown': 'Markdown',
-            'text': 'Text File'
+            'json': 'JSON',
+            'document_search_results': 'Search Results',
+            'text': 'Text'
         };
         return labels[type] || 'Artifact';
     }
 
     /**
-     * Get icon class for artifact type
+     * Get icon for artifact type
      */
     getArtifactIcon(type) {
         const icons = {
@@ -615,10 +707,11 @@ class ChatArtifacts {
             'mermaid': 'fas fa-project-diagram',
             'html': 'fab fa-html5',
             'markdown': 'fab fa-markdown',
-            'json': 'fas fa-brackets-curly'
+            'json': 'fas fa-brackets-curly',
+            'document_search_results': 'fas fa-search',
+            'text': 'fas fa-file-alt'
         };
-        
-        return icons[type] || 'fas fa-file-alt';
+        return icons[type] || 'fas fa-file';
     }
 
     /**

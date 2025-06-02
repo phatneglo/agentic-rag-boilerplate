@@ -159,18 +159,20 @@ class DocumentProcessingPipeline:
     ):
         """Monitor job completion and chain subsequent jobs."""
         try:
-            logger.info(f"Monitoring pipeline for document {document_id}")
+            logger.info(f"🔄 Starting pipeline monitoring for document {document_id}")
+            logger.info(f"📋 Conversion job ID: {conversion_job_id}")
             
             # Wait for conversion job to complete
+            logger.info("⏳ Waiting for Step 1 (Document Conversion) to complete...")
             conversion_result = await self._wait_for_job_completion(
                 conversion_job_id, settings.queue_names["document_converter"]
             )
             
             if not conversion_result.get("success"):
-                logger.error(f"Document conversion failed for {document_id}")
+                logger.error(f"❌ Document conversion failed for {document_id}: {conversion_result.get('error')}")
                 return
             
-            logger.info(f"Document conversion completed for {document_id}")
+            logger.info(f"✅ Step 1 completed for {document_id} - Starting Step 2")
             
             # Step 2: Queue metadata extraction
             metadata_job = await self._queue_metadata_extraction(
@@ -181,40 +183,51 @@ class DocumentProcessingPipeline:
                 extraction_options={}
             )
             
-            logger.info(f"Queued metadata extraction job: {metadata_job.id}")
+            logger.info(f"📋 Step 2 queued - Metadata extraction job: {metadata_job.id}")
             
             # Wait for metadata extraction to complete
+            logger.info("⏳ Waiting for Step 2 (Metadata Extraction) to complete...")
             metadata_result = await self._wait_for_job_completion(
                 metadata_job.id, settings.queue_names["metadata_extractor"]
             )
             
             if not metadata_result.get("success"):
-                logger.error(f"Metadata extraction failed for {document_id}")
+                logger.error(f"❌ Metadata extraction failed for {document_id}: {metadata_result.get('error')}")
                 return
             
-            logger.info(f"Metadata extraction completed for {document_id}")
+            logger.info(f"✅ Step 2 completed for {document_id} - Starting Steps 3 & 4")
             
-            # Step 3: Queue Typesense indexing
+            # Parse metadata result
+            try:
+                import json
+                metadata_data = json.loads(metadata_result.get("result", "{}"))
+                extracted_metadata = metadata_data.get("metadata", {})
+                embeddings = metadata_data.get("embeddings", {})
+            except (json.JSONDecodeError, ValueError):
+                logger.warning("Could not parse metadata result, using empty metadata")
+                extracted_metadata = {}
+                embeddings = {}
+            
+            # Step 3 & 4: Queue both indexing jobs in parallel
             typesense_job = await self._queue_typesense_indexing(
                 document_id=document_id,
-                metadata=metadata_result["metadata"],
-                embeddings=metadata_result.get("embeddings", {}),
+                metadata=extracted_metadata,
+                embeddings=embeddings,
                 indexing_options={}
             )
             
-            logger.info(f"Queued Typesense indexing job: {typesense_job.id}")
-            
-            # Step 4: Queue Qdrant indexing (can run in parallel with Typesense)
             qdrant_job = await self._queue_qdrant_indexing(
                 document_id=document_id,
                 markdown_path=initial_result["markdown_path"],
-                metadata=metadata_result["metadata"],
+                metadata=extracted_metadata,
                 indexing_options={}
             )
             
-            logger.info(f"Queued Qdrant indexing job: {qdrant_job.id}")
+            logger.info(f"📋 Step 3 queued - Typesense indexing job: {typesense_job.id}")
+            logger.info(f"📋 Step 4 queued - Qdrant indexing job: {qdrant_job.id}")
             
-            # Wait for both indexing jobs to complete
+            # Wait for both indexing jobs to complete (parallel)
+            logger.info("⏳ Waiting for Steps 3 & 4 (Indexing) to complete...")
             typesense_result, qdrant_result = await asyncio.gather(
                 self._wait_for_job_completion(
                     typesense_job.id, settings.queue_names["typesense_indexer"]
@@ -227,20 +240,32 @@ class DocumentProcessingPipeline:
             
             # Log final results
             if isinstance(typesense_result, Exception):
-                logger.error(f"Typesense indexing failed for {document_id}: {typesense_result}")
+                logger.error(f"❌ Typesense indexing failed for {document_id}: {typesense_result}")
             elif typesense_result.get("success"):
-                logger.info(f"Typesense indexing completed for {document_id}")
+                logger.info(f"✅ Step 3 completed - Typesense indexing for {document_id}")
+            else:
+                logger.error(f"❌ Typesense indexing failed for {document_id}: {typesense_result.get('error')}")
             
             if isinstance(qdrant_result, Exception):
-                logger.error(f"Qdrant indexing failed for {document_id}: {qdrant_result}")
+                logger.error(f"❌ Qdrant indexing failed for {document_id}: {qdrant_result}")
             elif qdrant_result.get("success"):
-                logger.info(f"Qdrant indexing completed for {document_id}")
+                logger.info(f"✅ Step 4 completed - Qdrant indexing for {document_id}")
+            else:
+                logger.error(f"❌ Qdrant indexing failed for {document_id}: {qdrant_result.get('error')}")
             
             # Pipeline completed
-            logger.info(f"Document processing pipeline completed for {document_id}")
+            success_count = sum([
+                1,  # Step 1 always succeeded to get here
+                1 if metadata_result.get("success") else 0,
+                1 if isinstance(typesense_result, dict) and typesense_result.get("success") else 0,
+                1 if isinstance(qdrant_result, dict) and qdrant_result.get("success") else 0
+            ])
+            
+            logger.info(f"🎉 Document processing pipeline completed for {document_id}")
+            logger.info(f"📊 Success rate: {success_count}/4 steps completed")
             
         except Exception as e:
-            logger.error(f"Pipeline monitoring failed for {document_id}: {e}")
+            logger.error(f"❌ Pipeline monitoring failed for {document_id}: {e}")
     
     async def _queue_document_conversion(
         self,
@@ -370,31 +395,57 @@ class DocumentProcessingPipeline:
     ) -> Dict[str, Any]:
         """Wait for a job to complete and return its result."""
         try:
-            # This is a simplified implementation
-            # In a real scenario, you might want to use job events or polling
+            logger.info(f"Waiting for job {job_id} in queue {queue_name} to complete...")
+            
             start_time = asyncio.get_event_loop().time()
             
             while True:
                 # Check timeout
-                if asyncio.get_event_loop().time() - start_time > timeout:
+                current_time = asyncio.get_event_loop().time()
+                if current_time - start_time > timeout:
                     raise TimeoutError(f"Job {job_id} timed out after {timeout} seconds")
                 
-                # In a real implementation, you would check job status
-                # For now, we'll simulate completion after a delay
-                await asyncio.sleep(5)
-                
-                # This is where you would check the actual job status
-                # For simulation purposes, we'll return a success result
-                # In practice, you'd query the job status from BullMQ
-                break
-            
-            # Simulated successful result
-            return {
-                "success": True,
-                "job_id": job_id,
-                "queue": queue_name,
-                "completed_at": datetime.utcnow().isoformat(),
-            }
+                try:
+                    # Check job status using Redis directly
+                    # BullMQ stores job data in Redis with specific keys
+                    job_key = f"bull:{queue_name}:{job_id}"
+                    
+                    # Check if job is completed
+                    job_data = await self.redis_connection.hgetall(job_key)
+                    
+                    if job_data:
+                        # Check job status
+                        finished_on = job_data.get('finishedOn')
+                        failed_on = job_data.get('failedOn')
+                        
+                        if finished_on:
+                            # Job completed successfully
+                            logger.info(f"Job {job_id} completed successfully")
+                            return {
+                                "success": True,
+                                "job_id": job_id,
+                                "queue": queue_name,
+                                "completed_at": finished_on,
+                                "result": job_data.get('returnvalue', '{}')
+                            }
+                        elif failed_on:
+                            # Job failed
+                            error_msg = job_data.get('failedReason', 'Unknown error')
+                            logger.error(f"Job {job_id} failed: {error_msg}")
+                            return {
+                                "success": False,
+                                "job_id": job_id,
+                                "queue": queue_name,
+                                "error": error_msg,
+                                "failed_at": failed_on
+                            }
+                    
+                    # Job still in progress, wait and check again
+                    await asyncio.sleep(2)
+                    
+                except Exception as e:
+                    logger.warning(f"Error checking job status for {job_id}: {e}")
+                    await asyncio.sleep(5)
             
         except Exception as e:
             logger.error(f"Job {job_id} failed: {e}")

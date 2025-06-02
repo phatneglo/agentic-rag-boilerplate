@@ -1,0 +1,42 @@
+# Sample Document for Testing
+
+This is a sample document to test the simplified document processing pipeline.
+
+## Introduction
+
+The document processing pipeline consists of 4 steps:
+
+1. **Document-to-Markdown conversion** using Marker
+2. **Metadata extraction** using LlamaIndex tree summarizer
+3. **Typesense indexing** with embeddings and content
+4. **Qdrant indexing** for RAG (Retrieval-Augmented Generation)
+
+## Content
+
+This document contains various types of information:
+
+- Technical specifications
+- Project requirements
+- Implementation details
+- Testing procedures
+
+### Technical Details
+
+The system uses several technologies:
+
+- **FastAPI** for the REST API
+- **Redis** for job queuing with BullMQ
+- **S3** for object storage
+- **Typesense** for search indexing
+- **Qdrant** for vector storage
+
+### Key Features
+
+1. **Simplified Architecture**: Single worker handles all steps
+2. **S3 Integration**: Files are uploaded to cloud storage
+3. **Progress Tracking**: Real-time progress monitoring
+4. **Automatic Cleanup**: Temporary files are cleaned up automatically
+
+## Conclusion
+
+This simplified pipeline provides a more maintainable and easier-to-understand document processing solution compared to the previous multi-worker approach. 

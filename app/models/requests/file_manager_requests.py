@@ -107,8 +107,9 @@ class MoveItemRequest(BaseModel):
             v = v.strip()
             if not v:
                 return None
-            if any(char in v for char in ['/', '\\', ':', '*', '?', '"', '<', '>', '|']):
-                raise ValueError(f"Name cannot contain: {', '.join(['/', '\\', ':', '*', '?', '\"', '<', '>', '|'])}")
+            invalid_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|']
+            if any(char in v for char in invalid_chars):
+                raise ValueError(f"Name cannot contain: {', '.join(invalid_chars)}")
         return v
     
     class Config:

@@ -22,6 +22,7 @@ from app.api.routes.file_manager import router as file_manager_router
 from app.api.routes.chat_routes import router as chat_router
 from app.api.routes.document_processing_routes import router as document_processing_router
 from app.api.routes.test_routes import router as test_router
+from app.api.v1.phpmaker_auth import router as phpmaker_auth_router
 from app.utils.queue_manager import queue_manager
 from app.models.responses.document_responses import HealthCheckResponse, ErrorResponse
 from app import __version__
@@ -392,6 +393,13 @@ app.include_router(
     test_router,
     prefix=f"/api/{settings.api_version}",
     tags=["Test Workers"]
+)
+
+# Include PHPMaker authentication router
+app.include_router(
+    phpmaker_auth_router,
+    prefix=f"/api/{settings.api_version}/phpmaker-auth",
+    tags=["PHPMaker Authentication"]
 )
 
 # Include WebSocket handler

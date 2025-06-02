@@ -60,6 +60,14 @@ class Settings(BaseSettings):
     openai_api_key: str = Field(default="", env="OPENAI_API_KEY")
     anthropic_api_key: str = Field(default="", env="ANTHROPIC_API_KEY")
     
+    # PHPMaker API Configuration
+    phpmaker_api_url: str = Field(default="", env="PHPMAKER_API_URL")
+    phpmaker_api_username: str = Field(default="", env="PHPMAKER_API_USERNAME")
+    phpmaker_api_password: str = Field(default="", env="PHPMAKER_API_PASSWORD")
+    phpmaker_jwt_expire_hours: int = Field(default=24, env="PHPMAKER_JWT_EXPIRE_HOURS")
+    phpmaker_jwt_permission: Optional[int] = Field(default=None, env="PHPMAKER_JWT_PERMISSION")
+    phpmaker_use_ssl: bool = Field(default=True, env="PHPMAKER_USE_SSL")
+    
     # Cache Configuration
     cache_ttl: int = Field(default=3600, env="CACHE_TTL")
     cache_max_size: int = Field(default=1000, env="CACHE_MAX_SIZE")

@@ -62,7 +62,7 @@ class BaseAgent(ABC):
         openai_config = get_openai_config()
         
         # Initialize LLM with configuration
-        if OPENAI_API_KEY:
+        if OPENAI_API_KEY():
             self.llm = ChatOpenAI(
                 model=openai_config["model"],
                 temperature=openai_config["temperature"],

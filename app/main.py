@@ -1,6 +1,10 @@
 """
 FastAPI application entry point.
 """
+# Load environment variables first, before any other imports
+from dotenv import load_dotenv
+load_dotenv()
+
 import os
 import time
 from contextlib import asynccontextmanager

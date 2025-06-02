@@ -48,5 +48,5 @@ def monitor_status(document_id, max_checks=20):
 
 if __name__ == "__main__":
     # Use the document ID from the recent test
-    document_id = "b3805fc5-a5a7-4f72-811a-14839c258fa5"
+    document_id = "62cf1f4d-6761-4b58-abd7-f464b79bf6f8"
     monitor_status(document_id) 

@@ -18,7 +18,7 @@ import sys
 import tempfile
 import uuid
 import signal
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, Any, Optional, List
 
@@ -77,11 +77,12 @@ class DocumentMetadata(BaseModel):
     tags: List[str] = Field(default_factory=list, description="Document tags/keywords")
     file_path: str = Field(description="Original file path")
     original_filename: str = Field(description="Original filename")
+    file_type: str = Field(description="File extension/type")
     summary: str = Field(description="Document summary")
     language: str = Field(default="en", description="Document language")
     word_count: int = Field(default=0, description="Word count")
     page_count: Optional[int] = Field(default=None, description="Number of pages")
-    extracted_at: str = Field(default_factory=lambda: datetime.utcnow().isoformat())
+    extracted_at: str = Field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 
 class DocumentProcessingWorker:
@@ -206,8 +207,10 @@ class DocumentProcessingWorker:
                     {'name': 'title', 'type': 'string'},
                     {'name': 'description', 'type': 'string'},
                     {'name': 'summary', 'type': 'string'},
+                    {'name': 'content', 'type': 'string'},
                     {'name': 'type', 'type': 'string', 'facet': True},
                     {'name': 'category', 'type': 'string', 'facet': True},
+                    {'name': 'file_type', 'type': 'string', 'facet': True},
                     {'name': 'authors', 'type': 'string[]', 'facet': True},
                     {'name': 'tags', 'type': 'string[]', 'facet': True},
                     {'name': 'date', 'type': 'string', 'optional': True},
@@ -223,7 +226,7 @@ class DocumentProcessingWorker:
                         'name': 'content_embedding',
                         'type': 'float[]',
                         'embed': {
-                            'from': ['title', 'description', 'authors', 'type', 'category', 'tags'],
+                            'from': ['title', 'description', 'content', 'authors', 'type', 'category', 'tags'],
                             'model_config': {
                                 'model_name': 'openai/text-embedding-3-small',
                                 'api_key': settings.openai_api_key
@@ -285,13 +288,20 @@ class DocumentProcessingWorker:
             logger.info(f"📄 Step 1: Converting document to markdown: {file_path}")
             
             file_ext = Path(file_path).suffix.lower()
+            markdown_content = ""
             
             if file_ext == '.pdf':
                 # Use Marker for PDF conversion
                 def convert_pdf():
                     # Use the new Marker API
                     rendered = self.marker_converter(file_path)
-                    return text_from_rendered(rendered)
+                    # Extract text from rendered result (handle tuple return)
+                    if isinstance(rendered, tuple):
+                        # If it's a tuple, take the first element which should be the text
+                        text_result = rendered[0] if rendered else ""
+                    else:
+                        text_result = rendered
+                    return text_from_rendered(text_result)
                 
                 loop = asyncio.get_event_loop()
                 markdown_content = await loop.run_in_executor(None, convert_pdf)
@@ -299,12 +309,22 @@ class DocumentProcessingWorker:
             elif file_ext in ['.txt', '.md']:
                 # Read text files directly
                 with open(file_path, 'r', encoding='utf-8') as f:
-                    markdown_content = f.read()
+                    content = f.read()
+                markdown_content = f"# {Path(file_path).name}\n\n{content}"
             else:
                 # For other formats, read as text (basic fallback)
                 with open(file_path, 'r', encoding='utf-8', errors='ignore') as f:
                     content = f.read()
                 markdown_content = f"# {Path(file_path).name}\n\n{content}"
+            
+            # Ensure we have valid string content
+            if not isinstance(markdown_content, str):
+                logger.warning(f"⚠️ Marker returned non-string: {type(markdown_content)}")
+                markdown_content = str(markdown_content)
+            
+            # Check if content is too short (potential issue)
+            if len(markdown_content.strip()) < 10:
+                logger.warning(f"⚠️ Extracted content seems too short: '{markdown_content[:100]}...'")
             
             logger.info(f"✅ Step 1 completed: {len(markdown_content)} characters extracted")
             return markdown_content
@@ -318,8 +338,13 @@ class DocumentProcessingWorker:
         try:
             logger.info(f"🔍 Step 2: Extracting metadata for document {document_id}")
             
+            # Ensure markdown_content is a string (fix for Pydantic validation error)
+            if not isinstance(markdown_content, str):
+                logger.warning(f"⚠️ markdown_content is not a string: {type(markdown_content)}")
+                markdown_content = str(markdown_content)
+            
             def extract_metadata():
-                # Create document
+                # Create document with validated string content
                 document = Document(text=markdown_content, id_=document_id)
                 
                 # Apply extractors to document
@@ -343,23 +368,41 @@ class DocumentProcessingWorker:
             loop = asyncio.get_event_loop()
             extracted_metadata = await loop.run_in_executor(None, extract_metadata)
             
-            # Build structured metadata
+            # Build structured metadata - improved for accuracy and conciseness
             title = extracted_metadata.get("document_title", [original_filename])[0]
-            summary = " ".join(extracted_metadata.get("section_summary", ["No summary available"])[:3])
+            if isinstance(title, list):
+                title = title[0] if title else original_filename
+            
+            # Create a concise description (max 200 chars)
+            raw_summary = extracted_metadata.get("section_summary", [""])[0]
+            if isinstance(raw_summary, list):
+                raw_summary = raw_summary[0] if raw_summary else ""
+            description = (raw_summary[:200] + "...") if len(raw_summary) > 200 else raw_summary
+            
+            # Create a more comprehensive summary for the summary field
+            summary_parts = extracted_metadata.get("section_summary", ["No summary available"])[:3]
+            summary = " ".join([str(part) for part in summary_parts])
+            
+            # Extract keywords more carefully
             keywords = []
             if "excerpt_keywords" in extracted_metadata:
-                for keyword_str in extracted_metadata["excerpt_keywords"]:
-                    keywords.extend([k.strip() for k in keyword_str.split(",") if k.strip()])
+                for keyword_item in extracted_metadata["excerpt_keywords"]:
+                    if isinstance(keyword_item, str):
+                        keywords.extend([k.strip() for k in keyword_item.split(",") if k.strip()])
+                    elif isinstance(keyword_item, list):
+                        for k in keyword_item:
+                            keywords.extend([kw.strip() for kw in str(k).split(",") if kw.strip()])
             
             metadata = DocumentMetadata(
                 title=title,
-                description=summary,
+                description=description,
                 type=self._infer_document_type(markdown_content),
                 category="document",
                 authors=[],
                 tags=list(set(keywords))[:10],  # Unique keywords, max 10
                 file_path=s3_file_path,
                 original_filename=original_filename,
+                file_type=Path(original_filename).suffix.lower(),
                 summary=summary,
                 word_count=len(markdown_content.split()),
                 page_count=None
@@ -387,21 +430,23 @@ class DocumentProcessingWorker:
         else:
             return 'document'
 
-    async def step3_index_to_typesense(self, metadata: DocumentMetadata, document_id: str) -> None:
+    async def step3_index_to_typesense(self, metadata: DocumentMetadata, document_id: str, markdown_content: str) -> None:
         """Step 3: Index to Typesense - from typesense_indexer_worker.py."""
         try:
             logger.info(f"🔍 Step 3: Indexing to Typesense for document {document_id}")
             
             # Prepare document for Typesense
-            current_timestamp = int(datetime.utcnow().timestamp())
+            current_timestamp = int(datetime.now(timezone.utc).timestamp())
             
             typesense_document = {
                 'id': document_id,
                 'title': metadata.title,
                 'description': metadata.description,
                 'summary': metadata.summary,
+                'content': markdown_content[:50000],  # Include content (limit to 50k chars)
                 'type': metadata.type,
                 'category': metadata.category,
+                'file_type': metadata.file_type,
                 'authors': metadata.authors,
                 'tags': metadata.tags,
                 'date': metadata.date,
@@ -445,7 +490,8 @@ class DocumentProcessingWorker:
                     model="text-embedding-3-small", 
                     api_key=settings.openai_api_key
                 )
-                Settings.chunk_size = 512  # Following documentation
+                Settings.chunk_size = 1024  # Increased chunk size to handle metadata
+                Settings.chunk_overlap = 200
                 
                 # Create vector store and storage context at processing time
                 vector_store = QdrantVectorStore(
@@ -457,17 +503,12 @@ class DocumentProcessingWorker:
                 # Create storage context
                 storage_context = StorageContext.from_defaults(vector_store=vector_store)
                 
-                # Create LlamaIndex document with metadata
+                # Create LlamaIndex document with minimal metadata (to avoid 986 > 512 error)
                 doc_metadata = {
                     "document_id": document_id,
-                    "title": metadata.title,
+                    "title": metadata.title[:100],  # Limit title length
                     "type": metadata.type,
-                    "category": metadata.category,
-                    "authors": ", ".join(metadata.authors),
-                    "file_path": metadata.file_path,
-                    "original_filename": metadata.original_filename,
-                    "summary": metadata.summary,
-                    "tags": ", ".join(metadata.tags),
+                    "file_name": metadata.original_filename,
                 }
                 
                 # Create document
@@ -483,7 +524,7 @@ class DocumentProcessingWorker:
                     show_progress=True
                 )
                 
-                return 1  # One document processed
+                return len(index.docstore.docs)  # Return number of documents processed
             
             loop = asyncio.get_event_loop()
             chunks_created = await loop.run_in_executor(None, create_and_index)
@@ -501,7 +542,7 @@ class DocumentProcessingWorker:
             progress_data = {
                 f"step_{step}_status": status,
                 f"step_{step}_progress": progress,
-                "last_updated": datetime.utcnow().isoformat()
+                "last_updated": datetime.now(timezone.utc).isoformat()
             }
             
             self.redis_client.hset(key, mapping=progress_data)
@@ -539,7 +580,7 @@ class DocumentProcessingWorker:
             
             # Step 3: Index to Typesense
             self.update_job_progress(document_id, 3, 0, "in_progress")
-            await self.step3_index_to_typesense(metadata, document_id)
+            await self.step3_index_to_typesense(metadata, document_id, markdown_content)
             self.update_job_progress(document_id, 3, 100, "completed")
             
             # Step 4: Index to Qdrant
@@ -557,7 +598,7 @@ class DocumentProcessingWorker:
                 mapping={
                     "status": "completed",
                     "overall_progress": 100,
-                    "completed_at": datetime.utcnow().isoformat()
+                    "completed_at": datetime.now(timezone.utc).isoformat()
                 }
             )
             
@@ -578,7 +619,7 @@ class DocumentProcessingWorker:
                 mapping={
                     "status": "failed",
                     "error": str(e),
-                    "failed_at": datetime.utcnow().isoformat()
+                    "failed_at": datetime.now(timezone.utc).isoformat()
                 }
             )
             

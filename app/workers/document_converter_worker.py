@@ -9,6 +9,10 @@ from pathlib import Path
 from typing import Any, Dict
 import signal
 
+# Force CPU-only processing for Marker
+os.environ["CUDA_VISIBLE_DEVICES"] = ""
+os.environ["TORCH_DEVICE"] = "cpu"
+
 # Add the parent directory to the Python path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
@@ -41,13 +45,27 @@ class DocumentConverterWorker:
         try:
             # Initialize Marker converter (this may take some time on first run)
             logger.info("Loading Marker models...")
+            
+            # Force CPU usage for models
+            import torch
+            if torch.cuda.is_available():
+                logger.info("CUDA is available but forcing CPU usage for compatibility")
+            else:
+                logger.info("CUDA not available, using CPU")
+            
+            # Create model dict with CPU device
+            model_dict = create_model_dict()
+            
             self.marker_converter = PdfConverter(
-                artifact_dict=create_model_dict(),
+                artifact_dict=model_dict,
             )
             logger.info("Marker models loaded successfully")
             
             # Create Redis connection string
-            redis_connection = f"redis://:{settings.redis_password}@{settings.redis_host}:{settings.redis_port}/{settings.redis_db}" if settings.redis_password else f"redis://{settings.redis_host}:{settings.redis_port}/{settings.redis_db}"
+            if settings.redis_password:
+                redis_connection = f"redis://:{settings.redis_password}@{settings.redis_host}:{settings.redis_port}/{settings.redis_db}"
+            else:
+                redis_connection = f"redis://{settings.redis_host}:{settings.redis_port}/{settings.redis_db}"
             
             # Create worker - BullMQ Python API
             self.worker = Worker(

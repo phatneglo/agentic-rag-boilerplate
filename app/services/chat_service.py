@@ -419,7 +419,11 @@ class MultiAgentChatService:
         # Send processing start event
         event = ChatEvent("processing_start", "🤖 Processing your request...", mode="thinking")
         if emit_event_callback:
-            await emit_event_callback(event)
+            try:
+                await emit_event_callback(event)
+            except Exception as e:
+                logger.warning("Connection lost during initial event", error=str(e), session_id=session_id)
+                return
         yield event
         
         try:
@@ -427,102 +431,155 @@ class MultiAgentChatService:
             handler = self.workflow.run(user_msg=message, memory=memory)
             
             current_agent = None
+            connection_lost = False
+            
+            # Helper function to safely emit events
+            async def safe_emit(event: ChatEvent):
+                nonlocal connection_lost
+                if connection_lost:
+                    return False
+                try:
+                    if emit_event_callback:
+                        await emit_event_callback(event)
+                    return True
+                except Exception as e:
+                    logger.info("Client connection lost, stopping message processing", 
+                               session_id=session_id, event_type=event.event_type)
+                    connection_lost = True
+                    # Cancel the workflow handler to stop processing
+                    try:
+                        if hasattr(handler, 'cancel'):
+                            handler.cancel()
+                    except Exception:
+                        pass
+                    return False
             
             # Stream events
-            async for workflow_event in handler.stream_events():
-                # Agent switching
-                if (
-                    hasattr(workflow_event, "current_agent_name")
-                    and workflow_event.current_agent_name != current_agent
-                ):
-                    current_agent = workflow_event.current_agent_name
+            try:
+                async for workflow_event in handler.stream_events():
+                    if connection_lost:
+                        logger.info("Stopping workflow processing - client disconnected", session_id=session_id)
+                        break
+                        
+                    # Agent switching
+                    if (
+                        hasattr(workflow_event, "current_agent_name")
+                        and workflow_event.current_agent_name != current_agent
+                    ):
+                        current_agent = workflow_event.current_agent_name
+                        event = ChatEvent(
+                            "agent_switch",
+                            f"{current_agent} is handling your request...",
+                            agent=current_agent,
+                            mode="thinking"
+                        )
+                        if await safe_emit(event):
+                            yield event
+                        else:
+                            break
+                    
+                    # Agent output
+                    elif isinstance(workflow_event, AgentOutput):
+                        if workflow_event.response.content:
+                            event = ChatEvent(
+                                "agent_response",
+                                workflow_event.response.content,
+                                agent=current_agent or "system",
+                                mode="output"
+                            )
+                            if await safe_emit(event):
+                                yield event
+                            else:
+                                break
+                            
+                        if workflow_event.tool_calls:
+                            for tool_call in workflow_event.tool_calls:
+                                event = ChatEvent(
+                                    "tool_call",
+                                    f"Using tool: {tool_call.tool_name}",
+                                    agent=current_agent or "system",
+                                    tool=tool_call.tool_name,
+                                    mode="thinking"
+                                )
+                                if await safe_emit(event):
+                                    yield event
+                                else:
+                                    break
+                            if connection_lost:
+                                break
+                    
+                    # Tool results
+                    elif isinstance(workflow_event, ToolCallResult):
+                        if workflow_event.tool_output:
+                            event = ChatEvent(
+                                "tool_result",
+                                str(workflow_event.tool_output),
+                                agent=current_agent or "system",
+                                tool=workflow_event.tool_name,
+                                mode="output"
+                            )
+                            if await safe_emit(event):
+                                yield event
+                            else:
+                                break
+                    
+                    # Streaming tokens
+                    elif isinstance(workflow_event, AgentStream):
+                        event = ChatEvent(
+                            "stream_token",
+                            workflow_event.delta,
+                            agent=current_agent or "system",
+                            mode="output"
+                        )
+                        if await safe_emit(event):
+                            yield event
+                        else:
+                            break
+            
+            except asyncio.CancelledError:
+                logger.info("Workflow processing cancelled due to client disconnect", session_id=session_id)
+                connection_lost = True
+            except Exception as stream_error:
+                if "invalid state" in str(stream_error).lower():
+                    logger.info("Workflow cancelled cleanly", session_id=session_id)
+                else:
+                    logger.error("Error during workflow streaming", error=str(stream_error), session_id=session_id)
+                connection_lost = True
+            
+            # Only continue if connection is still active
+            if not connection_lost:
+                try:
+                    # Get final result
+                    result = await handler
+                    
+                    # Add to database memory
+                    db_memory.add_message("assistant", str(result), current_agent)
+                    
+                    # Send completion
                     event = ChatEvent(
-                        "agent_switch",
-                        f"{current_agent} is handling your request...",
-                        agent=current_agent,
+                        "processing_complete",
+                        "✅ Request completed successfully",
                         mode="thinking"
                     )
-                    if emit_event_callback:
-                        await emit_event_callback(event)
-                    yield event
-                
-                # Agent output
-                elif isinstance(workflow_event, AgentOutput):
-                    if workflow_event.response.content:
-                        event = ChatEvent(
-                            "agent_response",
-                            workflow_event.response.content,
-                            agent=current_agent or "system",
-                            mode="output"
-                        )
-                        if emit_event_callback:
-                            await emit_event_callback(event)
+                    if await safe_emit(event):
                         yield event
-                        
-                    if workflow_event.tool_calls:
-                        for tool_call in workflow_event.tool_calls:
-                            event = ChatEvent(
-                                "tool_call",
-                                f"Using tool: {tool_call.tool_name}",
-                                agent=current_agent or "system",
-                                tool=tool_call.tool_name,
-                                mode="thinking"
-                            )
-                            if emit_event_callback:
-                                await emit_event_callback(event)
-                            yield event
-                
-                # Tool results
-                elif isinstance(workflow_event, ToolCallResult):
-                    if workflow_event.tool_output:
-                        event = ChatEvent(
-                            "tool_result",
-                            str(workflow_event.tool_output),
-                            agent=current_agent or "system",
-                            tool=workflow_event.tool_name,
-                            mode="output"
-                        )
-                        if emit_event_callback:
-                            await emit_event_callback(event)
-                        yield event
-                
-                # Streaming tokens
-                elif isinstance(workflow_event, AgentStream):
-                    event = ChatEvent(
-                        "stream_token",
-                        workflow_event.delta,
-                        agent=current_agent or "system",
-                        mode="output"
-                    )
-                    if emit_event_callback:
-                        await emit_event_callback(event)
-                    yield event
-            
-            # Get final result
-            result = await handler
-            
-            # Add to database memory
-            db_memory.add_message("assistant", str(result), current_agent)
-            
-            # Send completion
-            event = ChatEvent(
-                "processing_complete",
-                "✅ Request completed successfully",
-                mode="thinking"
-            )
-            if emit_event_callback:
-                await emit_event_callback(event)
-            yield event
+                except Exception as e:
+                    logger.error("Error getting final result", error=str(e), session_id=session_id)
+            else:
+                logger.info("Message processing stopped due to connection loss", session_id=session_id)
             
         except Exception as e:
             logger.error("Error processing message", error=str(e), session_id=session_id)
             error_event = ChatEvent(
                 "error",
-                f"❌ Error: {str(e)}",
+                f"⚠️ Processing error: {str(e)[:100]}...",
                 mode="error"
             )
             if emit_event_callback:
-                await emit_event_callback(error_event)
+                try:
+                    await emit_event_callback(error_event)
+                except Exception:
+                    logger.debug("Could not send error event - client disconnected", session_id=session_id)
             yield error_event
     
     async def process_message_simple(self, message: str, session_id: str) -> str:

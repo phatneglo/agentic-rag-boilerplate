@@ -9,6 +9,8 @@ from typing import Dict, Any, List
 import json
 import uuid
 from datetime import datetime
+from starlette.websockets import WebSocketState
+import asyncio
 
 from app.core.logging_config import get_logger
 from app.services.chat_service import chat_service, ChatEvent
@@ -26,24 +28,47 @@ class ConnectionManager:
     
     def __init__(self):
         self.active_connections: Dict[str, WebSocket] = {}
+        self.active_tasks: Dict[str, List[asyncio.Task]] = {}  # Track tasks per session
     
     async def connect(self, websocket: WebSocket, session_id: str):
         """Accept WebSocket connection"""
         await websocket.accept()
         self.active_connections[session_id] = websocket
+        self.active_tasks[session_id] = []  # Initialize task list
         logger.info("WebSocket connected", session_id=session_id, total_connections=len(self.active_connections))
     
     def disconnect(self, session_id: str):
-        """Remove WebSocket connection"""
+        """Remove WebSocket connection and cancel all tasks"""
         if session_id in self.active_connections:
             del self.active_connections[session_id]
-            logger.info("WebSocket disconnected", session_id=session_id, total_connections=len(self.active_connections))
+            
+        # Cancel all active tasks for this session
+        if session_id in self.active_tasks:
+            for task in self.active_tasks[session_id]:
+                if not task.done():
+                    task.cancel()
+            del self.active_tasks[session_id]
+            
+        logger.info("WebSocket disconnected and tasks cancelled", session_id=session_id, total_connections=len(self.active_connections))
+    
+    def add_task(self, session_id: str, task: asyncio.Task):
+        """Add a task to track for a session"""
+        if session_id in self.active_tasks:
+            self.active_tasks[session_id].append(task)
     
     async def send_event(self, session_id: str, event: ChatEvent):
         """Send event to specific WebSocket"""
         if session_id in self.active_connections:
             try:
-                await self.active_connections[session_id].send_text(event.to_json())
+                websocket = self.active_connections[session_id]
+                # Check if websocket is still connected
+                if websocket.client_state == WebSocketState.CONNECTED:
+                    await websocket.send_text(event.to_json())
+                else:
+                    # WebSocket is not connected, remove it
+                    logger.info("WebSocket not connected, removing from active connections", session_id=session_id)
+                    self.disconnect(session_id)
+                    raise ConnectionError("WebSocket is not connected")
             except Exception as e:
                 logger.error("Failed to send WebSocket event", error=str(e), session_id=session_id)
                 self.disconnect(session_id)
@@ -108,55 +133,99 @@ async def websocket_chat(websocket: WebSocket, session_id: str):
                 logger.info("Received chat message", message=user_message[:100], session_id=session_id)
                 
                 # Create callback to send events in real-time
+                connection_lost = False
                 async def emit_event_callback(event: ChatEvent):
+                    nonlocal connection_lost
+                    if connection_lost:
+                        # Connection is lost, stop trying to send events
+                        return
                     try:
                         await manager.send_event(session_id, event)
                     except Exception as e:
-                        logger.warning("Failed to send event, client may be disconnected", 
-                                     error=str(e), session_id=session_id)
-                        raise
+                        logger.info("Client disconnected, stopping event transmission", 
+                                   session_id=session_id, event_type=event.event_type)
+                        connection_lost = True
+                        raise ConnectionError("WebSocket connection lost")
                 
                 # Process message with streaming
-                async for event in chat_service.process_message_stream(
-                    user_message, 
-                    session_id,
-                    emit_event_callback
-                ):
-                    # Events are already sent via callback, but we can log them
-                    logger.debug("Chat event generated", 
-                               event_type=event.event_type, 
-                               session_id=session_id)
-                
+                processing_task = None
+                try:
+                    # Create a task for message processing that can be cancelled
+                    async def process_message():
+                        async for event in chat_service.process_message_stream(
+                            user_message, 
+                            session_id,
+                            emit_event_callback
+                        ):
+                            # Events are already sent via callback, but we can log them
+                            logger.debug("Chat event generated", 
+                                       event_type=event.event_type, 
+                                       session_id=session_id)
+                            
+                            # Check if connection is still active
+                            if connection_lost:
+                                logger.info("Stopping message processing due to lost connection", session_id=session_id)
+                                break
+                    
+                    processing_task = asyncio.create_task(process_message())
+                    manager.add_task(session_id, processing_task)  # Track the task
+                    await processing_task
+                    
+                except asyncio.CancelledError:
+                    logger.info("Message processing cancelled - client disconnected cleanly", session_id=session_id)
+                    break
+                except ConnectionError:
+                    # Connection was lost during processing
+                    logger.info("Message processing stopped - client connection lost", session_id=session_id)
+                    break
+                except Exception as e:
+                    logger.error("Unexpected error during message streaming", error=str(e), session_id=session_id)
+                    if not connection_lost:
+                        try:
+                            error_event = ChatEvent("error", "⚠️ Processing interrupted due to connection issue", mode="error")
+                            await manager.send_event(session_id, error_event)
+                        except Exception:
+                            logger.debug("Cannot send error message - client already disconnected", session_id=session_id)
+                    break
+                finally:
+                    # Ensure task is cancelled if still running
+                    if processing_task and not processing_task.done():
+                        processing_task.cancel()
+                        try:
+                            await processing_task
+                        except asyncio.CancelledError:
+                            pass
+                    
             except WebSocketDisconnect:
                 # Client disconnected during message processing
-                logger.info("WebSocket disconnected during message processing", session_id=session_id)
+                logger.info("Client disconnected gracefully", session_id=session_id)
                 break
             except json.JSONDecodeError:
                 try:
-                    error_event = ChatEvent("error", "Invalid JSON format", mode="error")
+                    error_event = ChatEvent("error", "📝 Invalid message format received", mode="error")
                     await manager.send_event(session_id, error_event)
                 except Exception:
                     # If we can't send error, client is likely disconnected
-                    logger.info("Cannot send error message, client disconnected", session_id=session_id)
+                    logger.debug("Client disconnected before error message could be sent", session_id=session_id)
                     break
             except Exception as e:
-                logger.error("Error processing chat message", error=str(e), session_id=session_id)
+                logger.error("Unexpected error in message handling", error=str(e), session_id=session_id)
                 try:
-                    error_event = ChatEvent("error", f"Error: {str(e)}", mode="error")
+                    error_event = ChatEvent("error", "❌ An unexpected error occurred", mode="error")
                     await manager.send_event(session_id, error_event)
                 except Exception:
                     # If we can't send error, client is likely disconnected
-                    logger.info("Cannot send error message, client disconnected", session_id=session_id)
+                    logger.debug("Client disconnected during error handling", session_id=session_id)
                     break
     
     except WebSocketDisconnect:
-        logger.info("WebSocket disconnected normally", session_id=session_id)
+        logger.info("Client disconnected gracefully", session_id=session_id)
     except Exception as e:
-        logger.error("WebSocket error", error=str(e), session_id=session_id)
+        logger.error("WebSocket connection error", error=str(e), session_id=session_id)
     finally:
         # Always clean up the connection
         manager.disconnect(session_id)
-        logger.info("WebSocket connection cleaned up", session_id=session_id)
+        logger.info("WebSocket session cleaned up successfully", session_id=session_id)
 
 
 @router.get("/demo")
@@ -481,7 +550,7 @@ async def chat_demo():
     </body>
     </html>
     """
-    return HTMLResponse(content=html_content)
+    return HTMLResponse(content=html_content, media_type="text/html; charset=utf-8")
 
 
 @router.get("/health")

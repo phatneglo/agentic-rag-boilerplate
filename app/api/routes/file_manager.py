@@ -313,10 +313,14 @@ async def download_folder(
         )
         
         # Return the zip file as a streaming response
+        zip_data = zip_buffer.getvalue()
         return StreamingResponse(
-            io.BytesIO(zip_buffer.getvalue()),
+            io.BytesIO(zip_data),
             media_type="application/zip",
-            headers={"Content-Disposition": f"attachment; filename={zip_filename}"}
+            headers={
+                "Content-Disposition": f"attachment; filename={zip_filename}",
+                "Content-Length": str(len(zip_data))
+            }
         )
         
     except HTTPException:

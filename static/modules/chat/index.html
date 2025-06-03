@@ -1,0 +1,209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🤖 Multi-Agent Chat System</title>
+    
+    <!-- Bootstrap 5 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css" rel="stylesheet">
+    
+    <!-- Custom CSS -->
+    <link href="/static/modules/chat/css/chat.css" rel="stylesheet">
+</head>
+<body>
+    <div class="container-fluid h-100">
+        <!-- Header -->
+        <nav class="navbar navbar-expand-lg navbar-dark bg-primary shadow-sm">
+            <div class="container-fluid">
+                <span class="navbar-brand mb-0 h1">
+                    <i class="bi bi-robot"></i>
+                    Multi-Agent Chat System
+                </span>
+                <div class="navbar-nav ms-auto">
+                    <div class="nav-item d-flex align-items-center">
+                        <span class="badge bg-light text-dark me-2" id="connectionStatus">
+                            <i class="bi bi-circle-fill text-danger"></i>
+                            Disconnected
+                        </span>
+                        <span class="text-light small" id="sessionInfo">
+                            Session: Not Connected
+                        </span>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Chat Container -->
+        <div class="row h-100 g-0">
+            <!-- Chat Area -->
+            <div class="col-lg-9 col-md-8 d-flex flex-column">
+                <!-- Chat Messages -->
+                <div class="chat-container flex-grow-1" id="chatContainer">
+                    <div class="d-flex justify-content-center align-items-center h-100" id="loadingScreen">
+                        <div class="text-center">
+                            <div class="spinner-border text-primary mb-3" role="status">
+                                <span class="visually-hidden">Connecting...</span>
+                            </div>
+                            <h5 class="text-muted">Connecting to Chat Service...</h5>
+                            <p class="text-muted">Please wait while we establish connection.</p>
+                        </div>
+                    </div>
+                    
+                    <!-- Chat messages will be dynamically added here -->
+                    <div id="messagesContainer" class="d-none">
+                        <!-- Welcome message will be added here -->
+                    </div>
+                </div>
+
+                <!-- Typing Indicator -->
+                <div id="typingIndicator" class="d-none">
+                    <div class="message agent-message">
+                        <div class="message-header">
+                            <i class="bi bi-robot"></i>
+                            <span class="agent-name">System</span>
+                            <span class="message-time">Processing...</span>
+                        </div>
+                        <div class="message-content">
+                            <div class="typing-animation">
+                                <span></span>
+                                <span></span>
+                                <span></span>
+                            </div>
+                            <span id="typingText">Thinking...</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Chat Input -->
+                <div class="chat-input-container">
+                    <div class="input-group">
+                        <input type="text" 
+                               class="form-control" 
+                               id="messageInput" 
+                               placeholder="Type your message... (e.g., 'Hello, search for documents about Baguio')"
+                               disabled>
+                        <button class="btn btn-primary" 
+                                type="button" 
+                                id="sendButton"
+                                disabled>
+                            <i class="bi bi-send-fill"></i>
+                            Send
+                        </button>
+                    </div>
+                    <div class="form-text">
+                        <i class="bi bi-info-circle"></i>
+                        Try asking: "Search for documents about Baguio" or "Hello, my name is [Your Name]"
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sidebar -->
+            <div class="col-lg-3 col-md-4 bg-light border-start">
+                <div class="sidebar-container">
+                    <!-- Chat Info -->
+                    <div class="sidebar-section">
+                        <h6 class="sidebar-title">
+                            <i class="bi bi-info-circle"></i>
+                            Chat Information
+                        </h6>
+                        <div class="sidebar-content">
+                            <div class="info-item">
+                                <strong>Status:</strong>
+                                <span id="sidebarStatus" class="badge bg-danger">Disconnected</span>
+                            </div>
+                            <div class="info-item">
+                                <strong>Session:</strong>
+                                <span id="sidebarSession" class="text-muted">Not Connected</span>
+                            </div>
+                            <div class="info-item">
+                                <strong>Messages:</strong>
+                                <span id="messageCount">0</span>
+                            </div>
+                            <div class="info-item">
+                                <strong>Current Agent:</strong>
+                                <span id="currentAgent" class="badge bg-secondary">None</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Available Agents -->
+                    <div class="sidebar-section">
+                        <h6 class="sidebar-title">
+                            <i class="bi bi-people-fill"></i>
+                            Available Agents
+                        </h6>
+                        <div class="sidebar-content">
+                            <div class="agent-card">
+                                <div class="agent-icon">
+                                    <i class="bi bi-chat-dots"></i>
+                                </div>
+                                <div class="agent-info">
+                                    <strong>ChatAgent</strong>
+                                    <small class="text-muted">General conversation</small>
+                                </div>
+                            </div>
+                            <div class="agent-card">
+                                <div class="agent-icon">
+                                    <i class="bi bi-search"></i>
+                                </div>
+                                <div class="agent-info">
+                                    <strong>KnowledgeBaseAgent</strong>
+                                    <small class="text-muted">Document search & analysis</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Activity -->
+                    <div class="sidebar-section">
+                        <h6 class="sidebar-title">
+                            <i class="bi bi-clock-history"></i>
+                            Recent Activity
+                        </h6>
+                        <div class="sidebar-content">
+                            <div id="activityLog" class="activity-log">
+                                <div class="activity-item">
+                                    <span class="activity-time">--:--</span>
+                                    <span class="activity-text">Waiting for connection...</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Quick Actions -->
+                    <div class="sidebar-section">
+                        <h6 class="sidebar-title">
+                            <i class="bi bi-lightning-fill"></i>
+                            Quick Actions
+                        </h6>
+                        <div class="sidebar-content">
+                            <div class="d-grid gap-2">
+                                <button class="btn btn-outline-primary btn-sm" onclick="sendQuickMessage('Hello, my name is Roniel Nuqui')">
+                                    <i class="bi bi-person"></i>
+                                    Introduce Myself
+                                </button>
+                                <button class="btn btn-outline-secondary btn-sm" onclick="sendQuickMessage('Search for documents about Baguio')">
+                                    <i class="bi bi-search"></i>
+                                    Search Baguio Docs
+                                </button>
+                                <button class="btn btn-outline-info btn-sm" onclick="clearChat()">
+                                    <i class="bi bi-trash"></i>
+                                    Clear Chat
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5 JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Custom JavaScript -->
+    <script src="/static/modules/chat/js/chat.js"></script>
+</body>
+</html> 

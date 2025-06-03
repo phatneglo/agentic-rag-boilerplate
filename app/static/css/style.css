@@ -1,4 +1,4 @@
-/* Multi-Agent Interface Styles */
+/* Multi-Agent Interface Styles
 .agent-responses {
     display: flex;
     flex-direction: column;
@@ -238,7 +238,7 @@
     border-left: 3px solid var(--error-color);
 }
 
-/* Agent Icons and Colors */
+
 .agent-section[data-agent="orchestrator"] {
     border-left: 4px solid #8B5CF6;
 }
@@ -259,7 +259,7 @@
     border-left: 4px solid #6B7280;
 }
 
-/* Responsive adjustments */
+
 @media (max-width: 768px) {
     .agent-section {
         padding: 12px;
@@ -277,4 +277,4 @@
         padding: 4px 8px;
         font-size: 0.8rem;
     }
-} 
+}  */

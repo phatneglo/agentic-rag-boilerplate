@@ -25,6 +25,7 @@ from app.api.routes.file_routes import upload_router
 from app.api.routes.file_manager import router as file_manager_router
 from app.api.routes.document_processing_routes import router as document_processing_router
 from app.api.routes.test_routes import router as test_router
+from app.api.routes.chat_routes import router as chat_router
 from app.api.v1.uac_auth import router as uac_auth_router
 from app.utils.queue_manager import queue_manager
 from app.models.responses.document_responses import HealthCheckResponse, ErrorResponse
@@ -330,6 +331,12 @@ async def redis_health_check() -> Dict[str, Any]:
         }
 
 
+# Include chat router for WebSocket functionality
+app.include_router(
+    chat_router,
+    tags=["chat"]
+)
+
 # Include routers
 app.include_router(
     document_router,
@@ -405,6 +412,17 @@ async def file_manager_ui():
     """Serve the file manager web interface."""
     return FileResponse("static/modules/file-manager/index.html")
 
+# Chat UI endpoint
+@app.get(
+    "/chat",
+    tags=["chat"],
+    summary="Chat Interface", 
+    description="Serve the standalone multi-agent chat interface"
+)
+async def chat_ui():
+    """Serve the standalone multi-agent chat interface."""
+    return FileResponse("static/modules/chat/index.html")
+
 @app.get(
     "/file-browser",
     tags=["file-browser"],
@@ -429,18 +447,26 @@ async def api_info() -> Dict[str, Any]:
     return {
         "name": "Document Processing API",
         "version": __version__,
-        "description": "A FastAPI-based document processing service with Redis queue management using BullMQ",
+        "description": "A FastAPI-based document processing service with Redis queue management using BullMQ and multi-agent chat",
         "docs_url": "/docs",
         "redoc_url": "/redoc",
         "health_url": "/health",
         "dashboard_url": "/",
         "file_manager_url": "/file-manager",
+        "chat_demo_url": "/chat/demo",
+        "chat_ui_url": "/chat",
         "api_prefix": f"/api/{settings.api_version}",
         "endpoints": {
             "convert_document": f"/api/{settings.api_version}/documents/convert",
             "index_typesense": f"/api/{settings.api_version}/documents/index/typesense",
             "index_qdrant": f"/api/{settings.api_version}/documents/index/qdrant",
             "sync_document": f"/api/{settings.api_version}/documents/sync",
+            "chat": {
+                "websocket": "/chat/ws/{session_id}",
+                "demo": "/chat/demo", 
+                "health": "/chat/health",
+                "sessions": "/chat/sessions"
+            },
             "document_processing": {
                 "process": f"/api/{settings.api_version}/document-processing/process",
                 "status": f"/api/{settings.api_version}/document-processing/status/{{document_id}}",

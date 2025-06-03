@@ -8,12 +8,15 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession, async_sessionmaker
 from sqlalchemy.pool import NullPool
 from sqlalchemy import text
+from sqlalchemy.ext.declarative import declarative_base
 from app.core.config import get_settings
 from app.core.logging_config import get_logger
-from .models import Base
 
 logger = get_logger(__name__)
 settings = get_settings()
+
+# Create SQLAlchemy Base for future models
+Base = declarative_base()
 
 # Global variables for database engine and session factory
 _engine = None
@@ -97,7 +100,7 @@ async def init_db():
     try:
         engine = get_engine()
         
-        # Create all tables
+        # Create all tables (currently none, but ready for future models)
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
         

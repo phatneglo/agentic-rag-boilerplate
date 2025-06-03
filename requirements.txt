@@ -96,17 +96,10 @@ boto3==1.35.95
 botocore==1.35.95
 aiofiles==24.1.0
 
-# LangGraph and Agent dependencies
-langgraph==0.3.28
-langgraph-api==0.1.9
-langchain-openai==0.2.12
-langchain-core==0.3.30
-langchain-community==0.3.30
-
-# OpenAI API
+# OpenAI API - Required for document indexing
 openai==1.57.2
 
-# LlamaIndex Core and Integrations (latest versions)
+# LlamaIndex Core and Integrations - Required for document indexing
 llama-index==0.12.9
 llama-index-vector-stores-qdrant==0.4.1
 llama-index-embeddings-openai==0.3.2

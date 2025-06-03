@@ -11,7 +11,7 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Dict, Any
 
-from fastapi import FastAPI, Request, status, WebSocket, Response
+from fastapi import FastAPI, Request, status, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, FileResponse
 from fastapi.exceptions import RequestValidationError
@@ -23,8 +23,6 @@ from app.core.logging_config import configure_logging, get_logger, log_request_r
 from app.api.routes.document_routes import router as document_router
 from app.api.routes.file_routes import upload_router
 from app.api.routes.file_manager import router as file_manager_router
-from app.api.routes.chat_routes import router as chat_router
-from app.api.routes.chat_memory_routes import router as chat_memory_router
 from app.api.routes.document_processing_routes import router as document_processing_router
 from app.api.routes.test_routes import router as test_router
 from app.api.v1.uac_auth import router as uac_auth_router
@@ -64,13 +62,6 @@ async def lifespan(app: FastAPI):
         logger.error("❌ Failed to initialize Redis connection", error=str(e))
         # Don't fail startup, let the app handle connection errors gracefully
     
-    # Initialize WebSocket manager
-    try:
-        from app.api.routes.websocket_handler import chat_websocket_manager
-        logger.info("✅ WebSocket manager initialized successfully")
-    except Exception as e:
-        logger.error("❌ Failed to initialize WebSocket manager", error=str(e))
-    
     # Store startup time
     app.state.startup_time = time.time()
     
@@ -94,20 +85,6 @@ async def lifespan(app: FastAPI):
         logger.info("✅ Redis connection closed successfully")
     except Exception as e:
         logger.error("❌ Error closing Redis connection", error=str(e))
-    
-    # Clean up WebSocket connections
-    try:
-        from app.api.routes.websocket_handler import chat_websocket_manager
-        # Close any remaining connections
-        for connection in chat_websocket_manager.active_connections.copy():
-            try:
-                await connection.close()
-            except:
-                pass
-        chat_websocket_manager.active_connections.clear()
-        logger.info("✅ WebSocket connections cleaned up")
-    except Exception as e:
-        logger.error("❌ Error cleaning up WebSocket connections", error=str(e))
     
     logger.info("✅ Document Processing API shutdown complete")
 
@@ -199,7 +176,6 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
         status_code=exc.status_code,
         detail=exc.detail
     )
-    
     return JSONResponse(
         status_code=exc.status_code,
         content={
@@ -207,11 +183,7 @@ async def http_exception_handler(request: Request, exc: StarletteHTTPException):
             "message": exc.detail,
             "timestamp": time.time(),
             "error_code": f"HTTP_{exc.status_code}",
-            "details": {
-                "status_code": exc.status_code,
-                "url": str(request.url),
-                "method": request.method
-            }
+            "details": None
         }
     )
 
@@ -223,8 +195,8 @@ async def general_exception_handler(request: Request, exc: Exception):
         "Unhandled exception",
         url=str(request.url),
         method=request.method,
-        error=str(exc),
-        exc_info=True
+        exception=str(exc),
+        exception_type=type(exc).__name__
     )
     
     return JSONResponse(
@@ -235,14 +207,14 @@ async def general_exception_handler(request: Request, exc: Exception):
             "timestamp": time.time(),
             "error_code": "INTERNAL_SERVER_ERROR",
             "details": {
-                "url": str(request.url),
-                "method": request.method
+                "exception_type": type(exc).__name__,
+                "exception_message": str(exc)
             }
         }
     )
 
 
-# Health check endpoints
+# Health check endpoint
 @app.get(
     "/health",
     response_model=HealthCheckResponse,
@@ -252,87 +224,43 @@ async def general_exception_handler(request: Request, exc: Exception):
 )
 async def health_check() -> HealthCheckResponse:
     """
-    Health check endpoint.
-    
-    Returns the health status of the API and its dependencies.
+    Health check endpoint that returns the status of the API and its dependencies.
     """
+    uptime = time.time() - app.state.startup_time if hasattr(app.state, 'startup_time') else 0
+    
+    # Test database connection
+    db_status = "healthy"
     try:
-        # Calculate uptime
-        uptime = time.time() - app.state.startup_time
-        
-        # Check Redis connection
-        dependencies = {}
-        try:
-            redis_client = await queue_manager.get_redis_client()
-            await redis_client.ping()
-            dependencies["redis"] = "connected"
-        except Exception as e:
-            logger.warning("Redis health check failed", error=str(e))
-            dependencies["redis"] = "disconnected"
-        
-        # Check file storage
-        try:
-            storage_path = Path(settings.file_storage_path)
-            storage_path.mkdir(parents=True, exist_ok=True)
-            dependencies["storage"] = "accessible"
-        except Exception as e:
-            logger.warning("Storage health check failed", error=str(e))
-            dependencies["storage"] = "inaccessible"
-        
-        # Get file storage metrics
-        file_count = 0
-        storage_used = 0
-        try:
-            storage_path = Path(settings.file_storage_path)
-            if storage_path.exists():
-                for file_path in storage_path.rglob("*"):
-                    if file_path.is_file():
-                        file_count += 1
-                        storage_used += file_path.stat().st_size
-        except Exception as e:
-            logger.warning("Failed to get storage metrics", error=str(e))
-        
-        # Determine overall status
-        overall_status = "healthy"
-        if dependencies["redis"] != "connected":
-            overall_status = "degraded"
-        if dependencies["storage"] != "accessible":
-            overall_status = "degraded"
-        
-        return HealthCheckResponse(
-            success=True,
-            message="Service is healthy" if overall_status == "healthy" else "Service is degraded",
-            service="document-processing-api",
-            status=overall_status,
-            version=__version__,
-            uptime=uptime,
-            dependencies=dependencies,
-            # Additional fields for dashboard
-            **{
-                "file_count": file_count,
-                "storage_used": storage_used,
-                "storage_status": dependencies["storage"],
-                "database_status": dependencies["redis"]  # Using Redis as our primary data store
-            }
-        )
-        
+        connection_successful = await test_connection()
+        if not connection_successful:
+            db_status = "unhealthy"
     except Exception as e:
-        logger.error("Health check failed", error=str(e))
-        return HealthCheckResponse(
-            success=False,
-            message="Health check failed",
-            service="document-processing-api",
-            status="unhealthy",
-            version=__version__,
-            uptime=0.0,
-            dependencies={"redis": "unknown", "storage": "unknown"},
-            **{
-                "file_count": 0,
-                "storage_used": 0,
-                "storage_status": "unknown",
-                "database_status": "unknown"
-            }
-        )
+        db_status = "unhealthy" 
+    
+    # Test Redis connection
+    redis_status = "healthy"
+    try:
+        redis_client = await queue_manager.get_redis_client()
+        await redis_client.ping()
+    except Exception as e:
+        redis_status = "unhealthy"
+    
+    # Overall status
+    overall_status = "healthy" if db_status == "healthy" and redis_status == "healthy" else "unhealthy"
+    
+    return HealthCheckResponse(
+        success=True,
+        message=f"Document Processing API is {overall_status}",
+        service="document-processing-api",
+        status=overall_status,
+        version=__version__,
+        uptime=uptime,
+        dependencies={
+            "database": db_status,
+            "redis": redis_status,
+            "queue_manager": "healthy" if redis_status == "healthy" else "unhealthy"
+        }
+    )
 
 
 @app.get(
@@ -344,32 +272,55 @@ async def health_check() -> HealthCheckResponse:
 async def redis_health_check() -> Dict[str, Any]:
     """
     Redis-specific health check endpoint.
-    
-    Returns the health status of the Redis connection.
     """
     try:
         redis_client = await queue_manager.get_redis_client()
-        await redis_client.ping()
         
-        return {
-            "success": True,
-            "message": "Redis is healthy",
-            "timestamp": time.time(),
-            "status": "connected",
-            "details": {
-                "host": settings.redis_host,
-                "port": settings.redis_port,
-                "db": settings.redis_db
+        # Test basic operations
+        test_key = "health_check_test"
+        test_value = str(time.time())
+        
+        # Set test value
+        await redis_client.set(test_key, test_value, ex=10)  # Expire in 10 seconds
+        
+        # Get test value
+        retrieved_value = await redis_client.get(test_key)
+        
+        # Clean up
+        await redis_client.delete(test_key)
+        
+        # Check if values match
+        if retrieved_value and retrieved_value.decode() == test_value:
+            return {
+                "status": "healthy",
+                "message": "Redis connection and operations successful",
+                "timestamp": time.time(),
+                "details": {
+                    "host": settings.redis_host,
+                    "port": settings.redis_port,
+                    "db": settings.redis_db,
+                    "connection_pool_size": redis_client.connection_pool.max_connections,
+                    "test_passed": True
+                }
             }
-        }
-        
+        else:
+            return {
+                "status": "unhealthy",
+                "message": "Redis test operation failed",
+                "timestamp": time.time(),
+                "details": {
+                    "host": settings.redis_host,
+                    "port": settings.redis_port,
+                    "db": settings.redis_db,
+                    "test_passed": False,
+                    "error": "Value mismatch in test operation"
+                }
+            }
     except Exception as e:
-        logger.error("Redis health check failed", error=str(e))
         return {
-            "success": False,
-            "message": "Redis is unhealthy",
+            "status": "unhealthy",
+            "message": f"Redis health check failed: {str(e)}",
             "timestamp": time.time(),
-            "status": "disconnected",
             "error": str(e),
             "details": {
                 "host": settings.redis_host,
@@ -397,18 +348,6 @@ app.include_router(
     prefix=f"/api/{settings.api_version}"
 )
 
-app.include_router(
-    chat_router,
-    prefix=f"/api/{settings.api_version}/chat",
-    tags=["chat"]
-)
-
-# Include chat memory routes
-app.include_router(
-    chat_memory_router,
-    tags=["chat-memory"]
-)
-
 # Include document processing pipeline router
 app.include_router(
     document_processing_router,
@@ -428,14 +367,6 @@ app.include_router(
     prefix=f"/api/{settings.api_version}/uac-auth",
     tags=["UAC Authentication"]
 )
-
-# Include WebSocket handler
-from app.api.routes.websocket_handler import websocket_endpoint
-
-@app.websocket("/ws/chat")
-async def chat_websocket(websocket: WebSocket):
-    """WebSocket endpoint for chat with streaming support"""
-    await websocket_endpoint(websocket)
 
 # Mount static files for file manager UI
 app.mount("/static", StaticFiles(directory="static"), name="static")
@@ -473,17 +404,6 @@ async def dashboard_ui():
 async def file_manager_ui():
     """Serve the file manager web interface."""
     return FileResponse("static/modules/file-manager/index.html")
-
-# Chat UI endpoint
-@app.get(
-    "/chat",
-    tags=["chat"],
-    summary="AI Chat Interface",
-    description="Serve the AI chat web interface"
-)
-async def chat_ui():
-    """Serve the AI chat interface."""
-    return FileResponse("static/modules/chat/chat.html")
 
 @app.get(
     "/file-browser",
@@ -544,10 +464,6 @@ async def api_info() -> Dict[str, Any]:
                 "move": f"/api/{settings.api_version}/file-manager/move",
                 "search": f"/api/{settings.api_version}/file-manager/search",
                 "info": f"/api/{settings.api_version}/file-manager/info"
-            },
-            "chat": {
-                "ui": "/chat",
-                "api": f"/api/{settings.api_version}/chat"
             },
             "test": {
                 "worker": f"/api/{settings.api_version}/test/worker",
